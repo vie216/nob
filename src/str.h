@@ -1,3 +1,6 @@
+#ifndef STR_H
+#define STR_H
+
 #include <stdbool.h>
 
 #include "defs.h"
@@ -22,3 +25,5 @@ typedef struct {
 
 void sb_push_str(StringBuilder *sb, Str str);
 void sb_push(StringBuilder *sb, char *str);
+
+#endif // STR_H
