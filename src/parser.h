@@ -6,14 +6,17 @@
 typedef enum {
   ExprKindBinOp = 0,
   ExprKindIntLit,
+  ExprKindBlock,
 } ExprKind;
 
 typedef struct ExprBinOp ExprBinOp;
 typedef struct ExprIntLit ExprIntLit;
+typedef struct ExprBlock ExprBlock;
 
 typedef union {
   ExprBinOp  *bin_op;
   ExprIntLit *int_lit;
+  ExprBlock  *block;
 } Expr;
 
 struct ExprBinOp {
@@ -28,6 +31,12 @@ struct ExprIntLit {
   Str       lit;
 };
 
-Expr parse_program(Str source);
+struct ExprBlock {
+  ExprKind  kind;
+  Expr     *exprs;
+  i32       len;
+};
+
+Expr parse_program(Str source, char *file_path);
 
 #endif // PARSER_H
