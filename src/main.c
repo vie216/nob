@@ -63,20 +63,25 @@ Str read_file(char *path) {
   return content;
 }
 
-void write_asm(char *path, char *_asm) {
-  i32 new_path_len;
+char *write_asm(char *path, char *_asm) {
+  i32 path_len;
+  char *new_path;
   FILE *file;
 
-  new_path_len = strlen(path) + 4;
-  path = realloc(path, new_path_len);
-  path[new_path_len - 4] = '.';
-  path[new_path_len - 3] = 'a';
-  path[new_path_len - 2] = 's';
-  path[new_path_len - 1] = 'm';
+  path_len = strlen(path);
+  new_path = malloc(path_len + 4);
+  for (i32 i = 0; i < path_len; ++i)
+    new_path[i] = path[i];
+  new_path[path_len + 0] = '.';
+  new_path[path_len + 1] = 'a';
+  new_path[path_len + 2] = 's';
+  new_path[path_len + 3] = 'm';
 
-  file = fopen(path, "w");
+  file = fopen(new_path, "w");
   fprintf(file, _asm);
   fclose(file);
+
+  return new_path;
 }
 
 void assemble(char *asm_path) {
@@ -94,7 +99,8 @@ void assemble(char *asm_path) {
 }
 
 int main(int argc, char **argv) {
-  char *input_path, *output_path, *_asm;
+  char *input_path, *output_path;
+  char *asm_path, *_asm;
   Str source_code;
   Expr program;
 
@@ -106,6 +112,6 @@ int main(int argc, char **argv) {
   INFO("Compiling\n");
   _asm = gen_linux_x86_64(program);
   INFO("Assembling\n");
-  write_asm(output_path, _asm);
-  assemble(output_path);
+  asm_path = write_asm(output_path, _asm);
+  assemble(asm_path);
 }

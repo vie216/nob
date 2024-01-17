@@ -66,10 +66,10 @@ Str gen_expr_linux_x86_64(StringBuilder *sb, Expr expr, Str target, bool force) 
     return expr.int_lit->lit;
   case ExprKindBlock:
     for (i32 i = 0; i + 1 < expr.block->len; ++i)
-      gen_expr_linux_x86_64(sb, expr.block->exprs[i], target, false);
+      gen_expr_linux_x86_64(sb, expr.block->items[i], target, false);
 
     if (expr.block->len > 0)
-      return gen_expr_linux_x86_64(sb, expr.block->exprs[expr.block->len - 1], target, force);
+      return gen_expr_linux_x86_64(sb, expr.block->items[expr.block->len - 1], target, force);
     if (!force)
       return STR("0", 1);
 
@@ -78,6 +78,9 @@ Str gen_expr_linux_x86_64(StringBuilder *sb, Expr expr, Str target, bool force) 
     sb_push(sb, "0\n");
 
     return target;
+  case ExprKindIdent:
+    ERROR("Not implemented\n");
+    exit(1);
   }
 
   ERROR("Unreachable\n");
