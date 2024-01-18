@@ -96,7 +96,8 @@ void assemble(char *asm_path) {
   for (i32 i = 0; i < len; ++i)
     cmd[i + 5] = asm_path[i];
   cmd[len + 5] = '\0';
-  system(cmd);
+  if (system(cmd))
+    exit(1);
 }
 
 int main(int argc, char **argv) {
