@@ -78,6 +78,7 @@ Str gen_expr_linux_x86_64(StringBuilder *sb, Expr expr, Str target, bool force) 
 
     return target;
   case ExprKindIdent:
+  case ExprKindStrLit:
     ERROR("Not implemented\n");
     exit(1);
   case ExprKindCall:

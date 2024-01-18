@@ -8,12 +8,13 @@
 typedef enum {
   TokenKindNone   = 0,
   TokenKindIntLit = 1 << 0,
-  TokenKindOp     = 1 << 1,
-  TokenKindSep    = 1 << 2,
-  TokenKindIdent  = 1 << 3,
-  TokenKindOParen = 1 << 4,
-  TokenKindCParen = 1 << 5,
-  TokenKindArgSep = 1 << 6,
+  TokenKindStrLit = 1 << 1,
+  TokenKindOp     = 1 << 2,
+  TokenKindSep    = 1 << 3,
+  TokenKindIdent  = 1 << 4,
+  TokenKindOParen = 1 << 5,
+  TokenKindCParen = 1 << 6,
+  TokenKindArgSep = 1 << 7,
 } TokenKind;
 
 typedef struct {
@@ -73,6 +74,7 @@ static bool parser_eof(Parser *parser) {
 static Token parser_next_token(Parser *parser) {
   TokenKind kind;
   char *start;
+  char escaped;
 
   while (!parser_eof(parser) && (isspace(*parser->current) || *parser->current == '#')) {
     if (*parser->current == '#') {
@@ -123,12 +125,27 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindCParen;
   } else if (*start == ',') {
     kind = TokenKindArgSep;
+  } else if (*start == '"') {
+    kind = TokenKindStrLit;
+    while (!parser_eof(parser) && (*parser->current != '"' || escaped)) {
+      escaped = *parser->current == '\\';
+      parser->current++;
+    }
+
+    if (parser_eof(parser)) {
+      PERROR("%s:%d:%d: ", "Unclosed string literal\n",
+             parser->file_path, parser->row + 1,
+             (i32) (start - parser->bol + 1));
+      exit(1);
+    }
+
+    parser->current++;
   }
 
   if (kind == TokenKindNone) {
     PERROR("%s:%d:%d: ", "Unknown token\n",
            parser->file_path, parser->row + 1,
-           (int) (start - parser->bol + 1));
+           (i32) (start - parser->bol + 1));
     exit(1);
   }
 
@@ -144,12 +161,11 @@ static Token parser_next_token(Parser *parser) {
 }
 
 static Token parser_peek_token(Parser *parser) {
-  Parser parser_backup;
+  Parser parser_copy;
   Token token;
 
-  parser_backup = *parser;
-  token = parser_next_token(parser);
-  *parser = parser_backup;
+  parser_copy = *parser;
+  token = parser_next_token(&parser_copy);
 
   return token;
 }
@@ -172,7 +188,9 @@ static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token;
 
-  token = parser_expect_token(parser, TokenKindIntLit | TokenKindIdent | TokenKindOParen);
+  token = parser_expect_token(parser,
+                              TokenKindIntLit | TokenKindIdent |
+                              TokenKindOParen | TokenKindStrLit);
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindIntLit;
@@ -192,6 +210,13 @@ static Expr parser_parse_lhs(Parser *parser) {
     }
   } else if (token.kind == TokenKindOParen) {
     lhs = parser_parse_block(parser, TokenKindSep, TokenKindCParen);
+  } else if (token.kind == TokenKindStrLit) {
+    lhs.kind = ExprKindStrLit;
+    lhs.as.str_lit = malloc(sizeof(ExprStrLit));
+    lhs.as.int_lit->lit = token.str;
+    for (i32 i = 0; i < token.str.len; ++i)
+      putc(token.str.ptr[i], stdout);
+    putc('\n', stdout);
   }
 
   return lhs;

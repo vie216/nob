@@ -6,6 +6,7 @@
 typedef enum {
   ExprKindBinOp = 0,
   ExprKindIntLit,
+  ExprKindStrLit,
   ExprKindBlock,
   ExprKindIdent,
   ExprKindCall,
@@ -13,6 +14,7 @@ typedef enum {
 
 typedef struct ExprBinOp ExprBinOp;
 typedef struct ExprIntLit ExprIntLit;
+typedef struct ExprStrLit ExprStrLit;
 typedef struct ExprBlock ExprBlock;
 typedef struct ExprIdent ExprIdent;
 typedef struct ExprCall ExprCall;
@@ -20,6 +22,7 @@ typedef struct ExprCall ExprCall;
 typedef union {
   ExprBinOp  *bin_op;
   ExprIntLit *int_lit;
+  ExprStrLit *str_lit;
   ExprBlock  *block;
   ExprIdent  *ident;
   ExprCall  *call;
@@ -37,6 +40,10 @@ struct ExprBinOp {
 };
 
 struct ExprIntLit {
+  Str       lit;
+};
+
+struct ExprStrLit {
   Str       lit;
 };
 
