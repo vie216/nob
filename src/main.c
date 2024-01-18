@@ -69,13 +69,14 @@ char *write_asm(char *path, char *_asm) {
   FILE *file;
 
   path_len = strlen(path);
-  new_path = malloc(path_len + 4);
+  new_path = malloc(path_len + 5);
   for (i32 i = 0; i < path_len; ++i)
     new_path[i] = path[i];
   new_path[path_len + 0] = '.';
   new_path[path_len + 1] = 'a';
   new_path[path_len + 2] = 's';
   new_path[path_len + 3] = 'm';
+  new_path[path_len + 4] = '\0';
 
   file = fopen(new_path, "w");
   fprintf(file, _asm);

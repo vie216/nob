@@ -36,7 +36,9 @@ typedef struct {
                     || ch == '[' || ch == ']'   \
                     || ch == ';' || ch == ':'   \
                     || ch == '#')
-#define IS_EXPR_END(token) ((token).kind == TokenKindIntLit || (token).kind == TokenKindIdent)
+#define IS_EXPR_END(token) ((token).kind == TokenKindIntLit     \
+                            || (token).kind == TokenKindIdent   \
+                            || (token).kind == TokenKindCParen)
 #define IS_IDENT(ch) (isalpha(ch) || ch == '_')
 
 static i32 op_precedence(Str op) {
@@ -48,17 +50,20 @@ static i32 op_precedence(Str op) {
   static struct OpPrecedence precedences[] = {
     { STR(",", 1), 0 },
     { STR("=", 1), 1 },
-    { STR("&&", 2), 2 }, { STR("||", 2), 2 },
-    { STR("&", 1), 4 }, { STR("|", 1), 4 }, { STR("^", 1), 4 },
-    { STR("+", 1), 5 }, { STR("-", 1), 5 },
-    { STR("*", 1), 6 }, { STR("/", 1), 6 }, { STR("%", 1), 6 },
+    { STR("||", 2), 2 },
+    { STR("&&", 2), 3 },
+    { STR("|", 1), 5 },
+    { STR("^", 1), 6 },
+    { STR("&", 1), 7 },
+    { STR("+", 1), 8 }, { STR("-", 1), 8 },
+    { STR("*", 1), 9 }, { STR("/", 1), 9 }, { STR("%", 1), 9 },
   };
 
   for (i32 i = 0; i < (int) ARRAY_LEN(precedences); ++i)
     if (str_eq(op, precedences[i].op))
       return precedences[i].precedence;
 
-  return 3;
+  return 4;
 }
 
 static bool parser_eof(Parser *parser) {
