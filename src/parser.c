@@ -13,6 +13,7 @@ typedef enum {
   TokenKindIdent  = 1 << 3,
   TokenKindOParen = 1 << 4,
   TokenKindCParen = 1 << 5,
+  TokenKindArgSep = 1 << 6,
 } TokenKind;
 
 typedef struct {
@@ -35,7 +36,7 @@ typedef struct {
                     || ch == '{' || ch == '}'   \
                     || ch == '[' || ch == ']'   \
                     || ch == ';' || ch == ':'   \
-                    || ch == '#')
+                    || ch == '#' || ch == ',')
 #define IS_EXPR_END(token) ((token).kind == TokenKindIntLit     \
                             || (token).kind == TokenKindIdent   \
                             || (token).kind == TokenKindCParen)
@@ -48,22 +49,21 @@ static i32 op_precedence(Str op) {
   };
 
   static struct OpPrecedence precedences[] = {
-    { STR(",", 1), 0 },
-    { STR("=", 1), 1 },
-    { STR("||", 2), 2 },
-    { STR("&&", 2), 3 },
-    { STR("|", 1), 5 },
-    { STR("^", 1), 6 },
-    { STR("&", 1), 7 },
-    { STR("+", 1), 8 }, { STR("-", 1), 8 },
-    { STR("*", 1), 9 }, { STR("/", 1), 9 }, { STR("%", 1), 9 },
+    { STR("=", 1), 0 },
+    { STR("||", 2), 1 },
+    { STR("&&", 2), 2 },
+    { STR("|", 1), 4 },
+    { STR("^", 1), 5 },
+    { STR("&", 1), 6 },
+    { STR("+", 1), 7 }, { STR("-", 1), 7 },
+    { STR("*", 1), 8 }, { STR("/", 1), 8 }, { STR("%", 1), 8 },
   };
 
   for (i32 i = 0; i < (int) ARRAY_LEN(precedences); ++i)
     if (str_eq(op, precedences[i].op))
       return precedences[i].precedence;
 
-  return 4;
+  return 3;
 }
 
 static bool parser_eof(Parser *parser) {
@@ -121,6 +121,8 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindOParen;
   } else if (*start == ')') {
     kind = TokenKindCParen;
+  } else if (*start == ',') {
+    kind = TokenKindArgSep;
   }
 
   if (kind == TokenKindNone) {
@@ -164,7 +166,7 @@ static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   return token;
 }
 
-static Expr parser_parse_block(Parser *parser, TokenKind end_with);
+static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
@@ -173,15 +175,23 @@ static Expr parser_parse_lhs(Parser *parser) {
   token = parser_expect_token(parser, TokenKindIntLit | TokenKindIdent | TokenKindOParen);
 
   if (token.kind == TokenKindIntLit) {
-    lhs.int_lit = malloc(sizeof(ExprIntLit));
-    lhs.int_lit->kind = ExprKindIntLit;
-    lhs.int_lit->lit = token.str;
+    lhs.kind = ExprKindIntLit;
+    lhs.as.int_lit = malloc(sizeof(ExprIntLit));
+    lhs.as.int_lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
-    lhs.ident = malloc(sizeof(ExprIdent));
-    lhs.ident->kind = ExprKindIdent;
-    lhs.ident->ident = token.str;
+    if (parser_peek_token(parser).kind == TokenKindOParen) {
+      parser_next_token(parser);
+      lhs.kind = ExprKindCall;
+      lhs.as.call = malloc(sizeof(ExprCall));
+      lhs.as.call->name = token.str;
+      lhs.as.call->args = *parser_parse_block(parser, TokenKindArgSep, TokenKindCParen).as.block;
+    } else {
+      lhs.kind = ExprKindIdent;
+      lhs.as.ident = malloc(sizeof(ExprIdent));
+      lhs.as.ident->ident = token.str;
+    }
   } else if (token.kind == TokenKindOParen) {
-    lhs = parser_parse_block(parser, TokenKindCParen);
+    lhs = parser_parse_block(parser, TokenKindSep, TokenKindCParen);
   }
 
   return lhs;
@@ -204,32 +214,32 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
 
     if (!bin_op) {
       bin_op = malloc(sizeof(ExprBinOp));
-      bin_op->kind = ExprKindBinOp;
     }
 
     bin_op->op = token.str;
     bin_op->lhs = lhs;
     bin_op->rhs = parser_parse_expr(parser, precedence);
-    lhs.bin_op = bin_op;
+    lhs.kind = ExprKindBinOp;
+    lhs.as.bin_op = bin_op;
   }
 
   return lhs;
 }
 
-static Expr parser_parse_block(Parser *parser, TokenKind end_with) {
+static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with) {
   Expr block, expr;
 
-  block.block = malloc(sizeof(ExprBlock));
-  block.block->kind = ExprKindBlock;
-  block.block->len = 0;
-  block.block->cap = 0;
+  block.kind = ExprKindBlock;
+  block.as.block = malloc(sizeof(ExprBlock));
+  block.as.block->len = 0;
+  block.as.block->cap = 0;
 
   while (parser_peek_token(parser).kind != end_with) {
     expr = parser_parse_expr(parser, 0);
-    DA_APPEND(*block.block, expr);
+    DA_APPEND(*block.as.block, expr);
 
     if (parser_peek_token(parser).kind != end_with)
-      parser_expect_token(parser, TokenKindSep);
+      parser_expect_token(parser, sep);
   }
 
   parser_next_token(parser);
@@ -249,5 +259,5 @@ Expr parse_program(Str source, char *file_path) {
     .last_token = (Token) { .kind = TokenKindNone },
   };
 
-  return parser_parse_block(&parser, TokenKindNone);
+  return parser_parse_block(&parser, TokenKindSep, TokenKindNone);
 }

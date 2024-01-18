@@ -8,41 +8,50 @@ typedef enum {
   ExprKindIntLit,
   ExprKindBlock,
   ExprKindIdent,
+  ExprKindCall,
 } ExprKind;
 
 typedef struct ExprBinOp ExprBinOp;
 typedef struct ExprIntLit ExprIntLit;
 typedef struct ExprBlock ExprBlock;
 typedef struct ExprIdent ExprIdent;
+typedef struct ExprCall ExprCall;
 
 typedef union {
   ExprBinOp  *bin_op;
   ExprIntLit *int_lit;
   ExprBlock  *block;
   ExprIdent  *ident;
+  ExprCall  *call;
+} ExprAs;
+
+typedef struct {
+  ExprKind kind;
+  ExprAs   as;
 } Expr;
 
 struct ExprBinOp {
-  ExprKind kind;
   Str      op;
   Expr     lhs;
   Expr     rhs;
 };
 
 struct ExprIntLit {
-  ExprKind  kind;
   Str       lit;
 };
 
 struct ExprBlock {
-  ExprKind  kind;
   Expr     *items;
   i32       len, cap;
 };
 
 struct ExprIdent {
-  ExprKind  kind;
   Str       ident;
+};
+
+struct ExprCall {
+  Str       name;
+  ExprBlock args;
 };
 
 Expr parse_program(Str source, char *file_path);
