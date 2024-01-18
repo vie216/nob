@@ -1,3 +1,3 @@
 (2 + 2 * 2) #/ x
 #foo(2, 4, 6, 8 + 10)
-"It is a string!"
+#"This is a string!"

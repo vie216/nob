@@ -214,9 +214,6 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.kind = ExprKindStrLit;
     lhs.as.str_lit = malloc(sizeof(ExprStrLit));
     lhs.as.int_lit->lit = token.str;
-    for (i32 i = 0; i < token.str.len; ++i)
-      putc(token.str.ptr[i], stdout);
-    putc('\n', stdout);
   }
 
   return lhs;
