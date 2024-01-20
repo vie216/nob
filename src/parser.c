@@ -122,7 +122,7 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindArgSep;
   } else if (*start == '"') {
     kind = TokenKindStrLit;
-    char escaped;
+    bool escaped;
     while (!parser_eof(parser) && (*parser->current != '"' || escaped)) {
       escaped = *parser->current == '\\';
       parser->current++;
@@ -190,6 +190,7 @@ static Expr parser_parse_lhs(Parser *parser) {
     if (parser_peek_token(parser).kind == TokenKindOParen) {
       parser_next_token(parser);
       Expr args = parser_parse_block(parser, TokenKindArgSep, TokenKindCParen);
+
       lhs.kind = ExprKindCall;
       lhs.as.call = malloc(sizeof(ExprCall));
       lhs.as.call->name = token.str;
@@ -249,7 +250,6 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
 
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with) {
   Expr block;
-
   block.kind = ExprKindBlock;
   block.as.block = malloc(sizeof(ExprBlock));
   block.as.block->len = 0;

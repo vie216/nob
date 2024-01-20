@@ -1,8 +1,6 @@
 #ifndef STR_H
 #define STR_H
 
-#include <stdbool.h>
-
 #include "defs.h"
 
 #define STR(ptr, len) ((Str) { ptr, len })

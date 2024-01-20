@@ -16,8 +16,8 @@
     (da).items[(da).len++] = element;                                 \
   } while (0)
 
-typedef byte           i8;
-typedef unsigned byte  u8;
+typedef char           i8;
+typedef unsigned char  u8;
 typedef short          i16;
 typedef unsigned short u16;
 typedef int            i32;
@@ -26,5 +26,10 @@ typedef long           i64;
 typedef unsigned long  u64;
 
 typedef float f32;
+
+typedef u8 bool;
+
+#define false 0
+#define true  1
 
 #endif // DEFS_H

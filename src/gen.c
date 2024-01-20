@@ -10,14 +10,14 @@ static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
                                STR("rcx", 3), STR("r8", 2),  STR("r9", 2) };
 
 typedef struct {
-  i8 regs[ARRAY_LEN(reg_names)];
-  i8 arg_regs[ARRAY_LEN(arg_reg_names)];
+  bool regs[ARRAY_LEN(reg_names)];
+  bool arg_regs[ARRAY_LEN(arg_reg_names)];
 } Memory;
 
 Str mem_reserve(Memory *mem) {
   for (i32 i = 0; i < (i32) ARRAY_LEN(reg_names); ++i) {
     if (!mem->regs[i]) {
-      mem->regs[i] = 1;
+      mem->regs[i] = true;
       return reg_names[i];
     }
   }
@@ -30,7 +30,7 @@ Str mem_reserve(Memory *mem) {
 void mem_free(Memory *mem, Str name) {
   for (i32 i = 0; i < (i32) ARRAY_LEN(reg_names); ++i) {
     if (str_eq(reg_names[i], name)) {
-      mem->regs[i] = 0;
+      mem->regs[i] = false;
       return;
     }
   }
@@ -43,7 +43,7 @@ void mem_free(Memory *mem, Str name) {
 Str mem_reserve_arg(Memory *mem) {
   for (i32 i = 0; i < (i32) ARRAY_LEN(arg_reg_names); ++i) {
     if (!mem->arg_regs[i]) {
-      mem->arg_regs[i] = 1;
+      mem->arg_regs[i] = true;
       return arg_reg_names[i];
     }
   }
