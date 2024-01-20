@@ -12,11 +12,9 @@
 void parse_args(int argc, char **argv,
                 char **input_path,
                 char **output_path) {
-  i32 i;
-
   *input_path = NULL;
   *output_path = "out";
-  i = 1;
+  i32 i = 1;
   while (i < argc) {
     if (argv[i][0] == '-') {
       if (argv[i][1] == 'o') {
@@ -49,10 +47,9 @@ void parse_args(int argc, char **argv,
 }
 
 Str read_file(char *path) {
-  FILE *file;
   Str content;
 
-  file = fopen(path, "r");
+  FILE *file = fopen(path, "r");
   fseek(file, 0, SEEK_END);
   content.len = ftell(file);
   content.ptr = malloc(content.len);
@@ -64,12 +61,8 @@ Str read_file(char *path) {
 }
 
 char *write_asm(char *path, char *_asm) {
-  i32 path_len;
-  char *new_path;
-  FILE *file;
-
-  path_len = strlen(path);
-  new_path = malloc(path_len + 5);
+  i32 path_len = strlen(path);
+  char *new_path = malloc(path_len + 5);
   for (i32 i = 0; i < path_len; ++i)
     new_path[i] = path[i];
   new_path[path_len + 0] = '.';
@@ -78,7 +71,7 @@ char *write_asm(char *path, char *_asm) {
   new_path[path_len + 3] = 'm';
   new_path[path_len + 4] = '\0';
 
-  file = fopen(new_path, "w");
+  FILE *file = fopen(new_path, "w");
   fprintf(file, _asm);
   fclose(file);
 
@@ -86,11 +79,8 @@ char *write_asm(char *path, char *_asm) {
 }
 
 void assemble(char *asm_path) {
-  i32 len;
-  char *cmd;
-
-  len = strlen(asm_path);
-  cmd = malloc(len + 5);
+  i32 len = strlen(asm_path);
+  char *cmd = malloc(len + 5);
   for (i32 i = 0; i < 5; ++i)
     cmd[i] = "fasm "[i];
   for (i32 i = 0; i < len; ++i)
@@ -102,18 +92,15 @@ void assemble(char *asm_path) {
 
 int main(int argc, char **argv) {
   char *input_path, *output_path;
-  char *asm_path, *_asm;
-  Str source_code;
-  Expr program;
 
   parse_args(argc, argv, &input_path, &output_path);
-  source_code = read_file(input_path);
+  Str source_code = read_file(input_path);
 
   INFO("Parsing\n");
-  program = parse_program(source_code, input_path);
+  Expr program = parse_program(source_code, input_path);
   INFO("Compiling\n");
-  _asm = gen_linux_x86_64(program);
+  char *_asm = gen_linux_x86_64(program);
   INFO("Assembling\n");
-  asm_path = write_asm(output_path, _asm);
+  char *asm_path = write_asm(output_path, _asm);
   assemble(asm_path);
 }

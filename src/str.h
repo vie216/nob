@@ -5,7 +5,7 @@
 
 #include "defs.h"
 
-#define STR(ptr_, len_) ((Str) { .ptr = (ptr_), .len = (len_) })
+#define STR(ptr, len) ((Str) { ptr, len })
 
 typedef struct {
   char *ptr;

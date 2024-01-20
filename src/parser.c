@@ -72,10 +72,6 @@ static bool parser_eof(Parser *parser) {
 }
 
 static Token parser_next_token(Parser *parser) {
-  TokenKind kind;
-  char *start;
-  char escaped;
-
   while (!parser_eof(parser) && (isspace(*parser->current) || *parser->current == '#')) {
     if (*parser->current == '#') {
       while (!parser_eof(parser) && *parser->current != '\n')
@@ -101,9 +97,8 @@ static Token parser_next_token(Parser *parser) {
   if (parser_eof(parser))
     return (Token) { .kind = TokenKindNone };
 
-  start = parser->current++;
-
-  kind = TokenKindNone;
+  TokenKind kind = TokenKindNone;
+  char *start = parser->current++;
 
   if (isdigit(*start)) {
     kind = TokenKindIntLit;
@@ -127,6 +122,7 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindArgSep;
   } else if (*start == '"') {
     kind = TokenKindStrLit;
+    char escaped;
     while (!parser_eof(parser) && (*parser->current != '"' || escaped)) {
       escaped = *parser->current == '\\';
       parser->current++;
@@ -161,19 +157,14 @@ static Token parser_next_token(Parser *parser) {
 }
 
 static Token parser_peek_token(Parser *parser) {
-  Parser parser_copy;
-  Token token;
-
-  parser_copy = *parser;
-  token = parser_next_token(&parser_copy);
+  Parser parser_copy = *parser;
+  Token token = parser_next_token(&parser_copy);
 
   return token;
 }
 
 static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
-  Token token;
-
-  token = parser_next_token(parser);
+  Token token = parser_next_token(parser);
   if (!(token.kind & expected_kind)) {
     PERROR("%s:%d:%d: ", "Unexpected token\n", parser->file_path, token.row, token.col);
     exit(1);
@@ -182,13 +173,12 @@ static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   return token;
 }
 
+static Expr parser_parse_expr(Parser *parser, i32 min_precedence);
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
-  Token token;
-
-  token = parser_expect_token(parser,
+  Token token = parser_expect_token(parser,
                               TokenKindIntLit | TokenKindIdent |
                               TokenKindOParen | TokenKindStrLit);
 
@@ -199,10 +189,26 @@ static Expr parser_parse_lhs(Parser *parser) {
   } else if (token.kind == TokenKindIdent) {
     if (parser_peek_token(parser).kind == TokenKindOParen) {
       parser_next_token(parser);
+      Expr args = parser_parse_block(parser, TokenKindArgSep, TokenKindCParen);
       lhs.kind = ExprKindCall;
       lhs.as.call = malloc(sizeof(ExprCall));
       lhs.as.call->name = token.str;
-      lhs.as.call->args = *parser_parse_block(parser, TokenKindArgSep, TokenKindCParen).as.block;
+      lhs.as.call->args = *args.as.block;
+      free(args.as.block);
+    } else if (str_eq(token.str, STR("let", 3))) {
+      Token name = parser_expect_token(parser, TokenKindIdent);
+      Token op = parser_expect_token(parser, TokenKindOp);
+      if (!str_eq(op.str, STR("=", 1))) {
+        PERROR("%s:%d:%d: ", "Expected `=` in `let` expression\n",
+               parser->file_path, op.row, op.col);
+        exit(1);
+      }
+      Expr value = parser_parse_expr(parser, 0);
+
+      lhs.kind = ExprKindVar;
+      lhs.as.var = malloc(sizeof(ExprVar));
+      lhs.as.var->name = name.str;
+      lhs.as.var->value = value;
     } else {
       lhs.kind = ExprKindIdent;
       lhs.as.ident = malloc(sizeof(ExprIdent));
@@ -220,36 +226,29 @@ static Expr parser_parse_lhs(Parser *parser) {
 }
 
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
-  Expr lhs;
-  ExprBinOp *bin_op = NULL;
-  Token token;
-  i32 precedence;
-
-  lhs = parser_parse_lhs(parser);
+  Expr lhs = parser_parse_lhs(parser);
+  ExprBinOp *expr = NULL;
 
   for (;;) {
-    token = parser_peek_token(parser);
-    precedence = op_precedence(token.str);
+    Token token = parser_peek_token(parser);
+    i32 precedence = op_precedence(token.str);
     if (token.kind != TokenKindOp || precedence <= min_precedence)
       break;
     parser_next_token(parser);
 
-    if (!bin_op) {
-      bin_op = malloc(sizeof(ExprBinOp));
-    }
-
-    bin_op->op = token.str;
-    bin_op->lhs = lhs;
-    bin_op->rhs = parser_parse_expr(parser, precedence);
+    expr = malloc(sizeof(ExprBinOp));
+    expr->op = token.str;
+    expr->lhs = lhs;
+    expr->rhs = parser_parse_expr(parser, precedence);
     lhs.kind = ExprKindBinOp;
-    lhs.as.bin_op = bin_op;
+    lhs.as.bin_op = expr;
   }
 
   return lhs;
 }
 
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with) {
-  Expr block, expr;
+  Expr block;
 
   block.kind = ExprKindBlock;
   block.as.block = malloc(sizeof(ExprBlock));
@@ -257,7 +256,7 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
   block.as.block->cap = 0;
 
   while (parser_peek_token(parser).kind != end_with) {
-    expr = parser_parse_expr(parser, 0);
+    Expr expr = parser_parse_expr(parser, 0);
     DA_APPEND(*block.as.block, expr);
 
     if (parser_peek_token(parser).kind != end_with)
@@ -270,9 +269,7 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
 }
 
 Expr parse_program(Str source, char *file_path) {
-  Parser parser;
-
-  parser = (Parser) {
+  Parser parser = (Parser) {
     .source = source,
     .file_path = file_path,
     .current = source.ptr,
