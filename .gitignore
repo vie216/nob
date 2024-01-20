@@ -1,1 +1,4 @@
 nob
+*.asm
+out
+test
