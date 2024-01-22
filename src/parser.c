@@ -184,9 +184,15 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindOParen | TokenKindStrLit);
 
   if (token.kind == TokenKindIntLit) {
-    lhs.kind = ExprKindIntLit;
-    lhs.as.int_lit = malloc(sizeof(ExprIntLit));
-    lhs.as.int_lit->lit = token.str;
+    lhs.kind = ExprKindLit;
+    lhs.as.lit = malloc(sizeof(ExprLit));
+    lhs.as.lit->kind = LitKindInt;
+    lhs.as.lit->lit = token.str;
+  } else if (token.kind == TokenKindStrLit) {
+    lhs.kind = ExprKindLit;
+    lhs.as.lit = malloc(sizeof(ExprLit));
+    lhs.as.lit->kind = LitKindStr;
+    lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
     if (parser_peek_token(parser).kind == TokenKindOParen) {
       parser_next_token(parser);
@@ -218,10 +224,6 @@ static Expr parser_parse_lhs(Parser *parser) {
     }
   } else if (token.kind == TokenKindOParen) {
     lhs = parser_parse_block(parser, TokenKindSep, TokenKindCParen);
-  } else if (token.kind == TokenKindStrLit) {
-    lhs.kind = ExprKindStrLit;
-    lhs.as.str_lit = malloc(sizeof(ExprStrLit));
-    lhs.as.int_lit->lit = token.str;
   }
 
   return lhs;

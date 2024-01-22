@@ -124,28 +124,53 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
     gen->syms.len = len;
     gen->block_size = size;
     return res;
-  case ExprKindIntLit:
-    if (target.kind == LocKindAny)
-      return LOC(LocKindAny, expr.as.int_lit->lit);
+  case ExprKindLit:
+    if (expr.as.lit->kind == LitKindInt) {
+      if (target.kind == LocKindAny)
+        return LOC(LocKindAny, expr.as.lit->lit);
 
-    if (target.kind == LocKindRegOrMem)
-      target.str = mem_reserve(&gen->mem);
+      if (target.kind == LocKindRegOrMem)
+        target.str = mem_reserve(&gen->mem);
 
-    if (str_eq(expr.as.int_lit->lit, STR("0", 1))) {
-      sb_push(&gen->sb, "    xor ");
-      sb_push_str(&gen->sb, target.str);
-      sb_push(&gen->sb, ", ");
-      sb_push_str(&gen->sb, target.str);
-      sb_push(&gen->sb, "\n");
-    } else {
+      if (str_eq(expr.as.lit->lit, STR("0", 1))) {
+        sb_push(&gen->sb, "    xor ");
+        sb_push_str(&gen->sb, target.str);
+        sb_push(&gen->sb, ", ");
+        sb_push_str(&gen->sb, target.str);
+        sb_push(&gen->sb, "\n");
+      } else {
+        sb_push(&gen->sb, "    mov ");
+        sb_push_str(&gen->sb, target.str);
+        sb_push(&gen->sb, ", ");
+        sb_push_str(&gen->sb, expr.as.lit->lit);
+        sb_push(&gen->sb, "\n");
+      }
+
+      return target;
+    } else if (expr.as.lit->kind == LitKindStr) {
+      DB db;
+      db.name.ptr = malloc(NUM_LEN(gen->dbs.len));
+      db.name.len = sprintf(db.name.ptr, "db_%d", gen->dbs.len);
+      db.data = expr.as.lit->lit;
+      DA_APPEND(gen->dbs, db);
+
+      if (target.kind == LocKindAny)
+        return LOC(LocKindAny, db.name);
+
+      if (target.kind == LocKindRegOrMem)
+        target.str = mem_reserve(&gen->mem);
+
       sb_push(&gen->sb, "    mov ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
-      sb_push_str(&gen->sb, expr.as.int_lit->lit);
+      sb_push_str(&gen->sb, db.name);
       sb_push(&gen->sb, "\n");
+
+      return target;
     }
 
-    return target;
+    ERROR("Unreachable\n");
+    exit(1);
   case ExprKindBinOp:
     if (str_eq(expr.as.bin_op->op, STR("+", 1))
         || str_eq(expr.as.bin_op->op, STR("-", 1))
@@ -176,31 +201,11 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
       printf("`\n");
       exit(1);
     }
-  case ExprKindStrLit:
-    DB db;
-    db.name.ptr = malloc(NUM_LEN(gen->dbs.len));
-    db.name.len = sprintf(db.name.ptr, "db_%d", gen->dbs.len);
-    db.data = expr.as.str_lit->lit;
-    DA_APPEND(gen->dbs, db);
-
-    if (target.kind == LocKindAny)
-      return LOC(LocKindAny, db.name);
-
-    if (target.kind == LocKindRegOrMem)
-      target.str = mem_reserve(&gen->mem);
-
-    sb_push(&gen->sb, "    mov ");
-    sb_push_str(&gen->sb, target.str);
-    sb_push(&gen->sb, ", ");
-    sb_push_str(&gen->sb, db.name);
-    sb_push(&gen->sb, "\n");
-
-    return target;
   case ExprKindIdent:
     for (i32 i = gen->syms.len - 1; i >= 0; --i) {
       Symbol sym = gen->syms.items[i];
-      if (sym.kind == SymbolKindVar
-          && str_eq(sym.as.var.name, expr.as.ident->ident)) {
+      if (sym.kind == SymbolKindVar &&
+          str_eq(sym.as.var.name, expr.as.ident->ident)) {
         if (target.kind == LocKindAny)
           return LOC(LocKindAny, sym.as.var.loc);
 
@@ -229,16 +234,23 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
     loc.ptr = malloc(loc.len);
     sprintf(loc.ptr, "qword [rbp - %d]", gen->block_size);
 
-    if (target.kind == LocKindCertain) {
-      Loc value = gen_expr_linux_x86_64(gen, expr.as.var->value, target);
+    if (target.kind != LocKindCertain) {
+      if (expr.as.var->value.kind == ExprKindLit)
+        target = LOC(LocKindCertain, loc);
+      else
+        target.kind = LocKindRegOrMem;
+    }
+
+    Loc value = gen_expr_linux_x86_64(gen, expr.as.var->value, target);
+    if (value.kind == LocKindRegOrMem)
+      mem_free(&gen->mem, value.str);
+
+    if (target.kind != LocKindCertain || !str_eq(target.str, loc)) {
       sb_push(&gen->sb, "    mov ");
       sb_push_str(&gen->sb, loc);
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, value.str);
       sb_push(&gen->sb, "\n");
-    } else {
-      target = LOC(LocKindCertain, loc);
-      gen_expr_linux_x86_64(gen, expr.as.var->value, target);
     }
 
     DA_APPEND(gen->syms, ((Symbol) {

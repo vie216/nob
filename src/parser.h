@@ -5,8 +5,7 @@
 
 typedef enum {
   ExprKindBinOp = 0,
-  ExprKindIntLit,
-  ExprKindStrLit,
+  ExprKindLit,
   ExprKindBlock,
   ExprKindIdent,
   ExprKindCall,
@@ -14,19 +13,17 @@ typedef enum {
 } ExprKind;
 
 typedef struct ExprBinOp ExprBinOp;
-typedef struct ExprIntLit ExprIntLit;
-typedef struct ExprStrLit ExprStrLit;
+typedef struct ExprLit   ExprLit;
 typedef struct ExprBlock ExprBlock;
 typedef struct ExprIdent ExprIdent;
-typedef struct ExprCall ExprCall;
-typedef struct ExprVar ExprVar;
+typedef struct ExprCall  ExprCall;
+typedef struct ExprVar   ExprVar;
 
 typedef union {
-  ExprBinOp  *bin_op;
-  ExprIntLit *int_lit;
-  ExprStrLit *str_lit;
-  ExprBlock  *block;
-  ExprIdent  *ident;
+  ExprBinOp *bin_op;
+  ExprLit   *lit;
+  ExprBlock *block;
+  ExprIdent *ident;
   ExprCall  *call;
   ExprVar   *var;
 } ExprAs;
@@ -37,26 +34,28 @@ typedef struct {
 } Expr;
 
 struct ExprBinOp {
-  Str      op;
-  Expr     lhs;
-  Expr     rhs;
+  Str  op;
+  Expr lhs;
+  Expr rhs;
 };
 
-struct ExprIntLit {
-  Str       lit;
-};
+typedef enum {
+  LitKindInt = 0,
+  LitKindStr,
+} LitKind;
 
-struct ExprStrLit {
-  Str       lit;
+struct ExprLit {
+  LitKind kind;
+  Str     lit;
 };
 
 struct ExprBlock {
-  Expr     *items;
-  i32       len, cap;
+  Expr *items;
+  i32   len, cap;
 };
 
 struct ExprIdent {
-  Str       ident;
+  Str ident;
 };
 
 struct ExprCall {
@@ -65,8 +64,8 @@ struct ExprCall {
 };
 
 struct ExprVar {
-  Str       name;
-  Expr      value;
+  Str  name;
+  Expr value;
 };
 
 Expr parse_program(Str source, char *file_path);
