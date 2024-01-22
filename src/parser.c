@@ -39,7 +39,8 @@ typedef struct {
                     || ch == ';' || ch == ':'   \
                     || ch == '#' || ch == ',')
 #define IS_EXPR_END(token) ((token).kind == TokenKindIntLit     \
-                            || (token).kind == TokenKindIdent   \
+                            || (token).kind == TokenKindStrLit   \
+                            || (token).kind == TokenKindIdent  \
                             || (token).kind == TokenKindCParen)
 #define IS_IDENT(ch) (isalpha(ch) || ch == '_')
 
