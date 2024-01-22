@@ -110,7 +110,7 @@ typedef struct {
 
 Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
   switch (expr.kind) {
-  case ExprKindBlock:
+  case ExprKindBlock: ;
     Loc res = LOC(LocKindAny, {0});
     i32 len = gen->syms.len;
     i32 size = gen->block_size;
@@ -263,6 +263,24 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
 
     return target;
   case ExprKindCall:
+    for (i32 i = 0; i < expr.as.call->args.len; ++i) {
+      Str arg = mem_reserve_arg(&gen->mem);
+      gen_expr_linux_x86_64(gen, expr.as.call->args.items[i],
+                            LOC(LocKindCertain, arg));
+    }
+
+    sb_push(&gen->sb, "    call ");
+    sb_push_str(&gen->sb, expr.as.call->name);
+    sb_push(&gen->sb, "\n");
+
+    if (target.kind == LocKindCertain) {
+      sb_push(&gen->sb, "    mov ");
+      sb_push_str(&gen->sb, target.str);
+      sb_push(&gen->sb, ", rax\n");
+    }
+
+    mem_free_args(&gen->mem);
+    return target;
   default:
     ERROR("Not implemented\n");
     exit(1);
