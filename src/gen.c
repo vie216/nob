@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "gen.h"
 #include "log.h"
@@ -34,10 +35,6 @@ void mem_free(Memory *mem, Str name) {
       return;
     }
   }
-
-  ERROR("Unknown register name: ");
-  str_println(name);
-  exit(1);
 }
 
 Str mem_reserve_arg(Memory *mem) {
@@ -48,14 +45,14 @@ Str mem_reserve_arg(Memory *mem) {
     }
   }
 
-  ERROR("Exceeded registers count\n");
+  ERROR("Exceeded arg registers count\n");
   INFO("TODO: use stack when this happens\n");
   exit(1);
 }
 
 void mem_free_args(Memory *mem) {
   for (i32 i = 0; i < (i32) ARRAY_LEN(arg_reg_names); ++i)
-    mem->arg_regs[i] = 0;
+    mem->arg_regs[i] = false;
 }
 
 typedef struct {
@@ -67,10 +64,34 @@ typedef struct {
   i32 len, cap;
 } DBs;
 
+typedef enum {
+  SymbolKindVar = 0,
+} SymbolKind;
+
+typedef struct {
+  Str name, loc;
+} SymbolVar;
+
+typedef union {
+  SymbolVar var;
+} SymbolAs;
+
+typedef struct {
+  SymbolKind kind;
+  SymbolAs   as;
+} Symbol;
+
+typedef struct {
+  Symbol *items;
+  i32     len, cap;
+} Symbols;
+
 typedef struct {
   StringBuilder sb;
   Memory        mem;
   DBs           dbs;
+  Symbols       syms;
+  i32           block_size;
 } Generator;
 
 typedef enum {
@@ -85,16 +106,24 @@ typedef struct {
 } Loc;
 
 #define LOC(kind, str) ((Loc) { kind, str })
+#define NUM_LEN(num) (num == 0 ? 1 : (int)(log10(num)+1))
 
 Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
   switch (expr.kind) {
   case ExprKindBlock:
+    Loc res = LOC(LocKindAny, {0});
+    i32 len = gen->syms.len;
+    i32 size = gen->block_size;
+
     for (i32 i = 0; i + 1 < expr.as.block->len; ++i)
       mem_free(&gen->mem, gen_expr_linux_x86_64(gen, expr.as.block->items[i], LOC(LocKindAny, {0})).str);
 
     if (expr.as.block->len > 0)
-      return gen_expr_linux_x86_64(gen, expr.as.block->items[expr.as.block->len - 1], target);
-    return LOC(LocKindAny, {0});
+      res = gen_expr_linux_x86_64(gen, expr.as.block->items[expr.as.block->len - 1], target);
+
+    gen->syms.len = len;
+    gen->block_size = size;
+    return res;
   case ExprKindIntLit:
     if (target.kind == LocKindAny)
       return LOC(LocKindAny, expr.as.int_lit->lit);
@@ -149,7 +178,7 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
     }
   case ExprKindStrLit:
     DB db;
-    db.name.ptr = malloc(6);
+    db.name.ptr = malloc(NUM_LEN(gen->dbs.len));
     db.name.len = sprintf(db.name.ptr, "db_%d", gen->dbs.len);
     db.data = expr.as.str_lit->lit;
     DA_APPEND(gen->dbs, db);
@@ -168,8 +197,60 @@ Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
 
     return target;
   case ExprKindIdent:
-  case ExprKindCall:
+    for (i32 i = gen->syms.len - 1; i >= 0; --i) {
+      Symbol sym = gen->syms.items[i];
+      if (sym.kind == SymbolKindVar
+          && str_eq(sym.as.var.name, expr.as.ident->ident)) {
+        if (target.kind == LocKindAny)
+          return LOC(LocKindAny, sym.as.var.loc);
+
+        if (target.kind == LocKindRegOrMem)
+          target.str = mem_reserve(&gen->mem);
+
+        sb_push(&gen->sb, "    mov ");
+        sb_push_str(&gen->sb, target.str);
+        sb_push(&gen->sb, ", ");
+        sb_push_str(&gen->sb, sym.as.var.loc);
+        sb_push(&gen->sb, "\n");
+
+        return target;
+      }
+    }
+
+    ERROR("`");
+    str_print(expr.as.ident->ident);
+    puts("` undeclared");
+    exit(1);
   case ExprKindVar:
+    gen->block_size += 8;
+
+    Str loc;
+    loc.len = NUM_LEN(gen->block_size) + 14;
+    loc.ptr = malloc(loc.len);
+    sprintf(loc.ptr, "qword [rbp - %d]", gen->block_size);
+
+    if (target.kind == LocKindCertain) {
+      Loc value = gen_expr_linux_x86_64(gen, expr.as.var->value, target);
+      sb_push(&gen->sb, "    mov ");
+      sb_push_str(&gen->sb, loc);
+      sb_push(&gen->sb, ", ");
+      sb_push_str(&gen->sb, value.str);
+      sb_push(&gen->sb, "\n");
+    } else {
+      target = LOC(LocKindCertain, loc);
+      gen_expr_linux_x86_64(gen, expr.as.var->value, target);
+    }
+
+    DA_APPEND(gen->syms, ((Symbol) {
+          SymbolKindVar,
+          { .var = {
+              expr.as.var->name,
+              loc,
+            } },
+        }));
+
+    return target;
+  case ExprKindCall:
   default:
     ERROR("Not implemented\n");
     exit(1);
@@ -183,13 +264,15 @@ char *gen_linux_x86_64(Expr expr) {
   sb_push(&gen.sb, "entry _start\n");
   sb_push(&gen.sb, "segment readable executable\n");
   sb_push(&gen.sb, "_start:\n");
+  sb_push(&gen.sb, "    mov rbp, rsp\n");
 
   gen_expr_linux_x86_64(&gen, expr, LOC(LocKindCertain, STR("rdi", 3)));
 
   sb_push(&gen.sb, "    mov rax, 60\n");
   sb_push(&gen.sb, "    syscall\n");
 
-  sb_push(&gen.sb, "segment readable\n");
+  if (gen.dbs.len > 0)
+    sb_push(&gen.sb, "segment readable\n");
   for (i32 i = 0; i < gen.dbs.len; ++i) {
     sb_push_str(&gen.sb, gen.dbs.items[i].name);
     sb_push(&gen.sb, ": db ");
