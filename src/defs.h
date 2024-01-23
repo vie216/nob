@@ -2,7 +2,8 @@
 #define DEFS_H
 
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
-#define DA_APPEND(da, element) do {                                   \
+#define DA_APPEND(da, element)                                        \
+  do {                                                                \
     if ((da).cap <= (da).len) {                                       \
       if ((da).cap) {                                                 \
         while ((da).cap <= (da).len)                                  \

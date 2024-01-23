@@ -10,6 +10,7 @@ typedef enum {
   ExprKindIdent,
   ExprKindCall,
   ExprKindVar,
+  ExprKindFun,
 } ExprKind;
 
 typedef struct ExprBinOp ExprBinOp;
@@ -18,6 +19,7 @@ typedef struct ExprBlock ExprBlock;
 typedef struct ExprIdent ExprIdent;
 typedef struct ExprCall  ExprCall;
 typedef struct ExprVar   ExprVar;
+typedef struct ExprFun   ExprFun;
 
 typedef union {
   ExprBinOp *bin_op;
@@ -26,6 +28,7 @@ typedef union {
   ExprIdent *ident;
   ExprCall  *call;
   ExprVar   *var;
+  ExprFun   *fun;
 } ExprAs;
 
 typedef struct {
@@ -59,13 +62,24 @@ struct ExprIdent {
 };
 
 struct ExprCall {
-  Str       name;
-  ExprBlock args;
+  Str        name;
+  ExprBlock *args;
 };
 
 struct ExprVar {
   Str  name;
   Expr value;
+};
+
+typedef struct {
+  Str *items;
+  i32  len, cap;
+} Args;
+
+struct ExprFun {
+  Str  name;
+  Args args;
+  Expr body;
 };
 
 Expr parse_program(Str source, char *file_path);

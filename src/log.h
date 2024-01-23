@@ -11,16 +11,19 @@
 
 #else
 
-#define PERROR(prefix, ...) do {                              \
-    fprintf(stderr, __FILE__ ":%d: ", __LINE__);              \
+#define PERROR(prefix, ...)                                           \
+  do {                                                                \
+    fprintf(stderr, __FILE__ ":%d: ", __LINE__);                      \
     fprintf(stderr, prefix "\033[31;1m[ERROR]\033[0m " __VA_ARGS__);  \
   } while (0)
-#define PWARN(prefix, ...) do {                                         \
+#define PWARN(prefix, ...)                                              \
+  do {                                                                  \
     fprintf(stderr, __FILE__ ":%d:  ", __LINE__);                       \
-    fprintf(stderr, prefix ": \033[33;1m[WARN]\033[0m " __VA_ARGS__); \
+    fprintf(stderr, prefix ": \033[33;1m[WARN]\033[0m " __VA_ARGS__);   \
   } while (0)
-#define PINFO(prefix, ...) do {                   \
-    printf(__FILE__ ":%d: ", __LINE__);           \
+#define PINFO(prefix, ...)                              \
+  do {                                                  \
+    printf(__FILE__ ":%d: ", __LINE__);                 \
     printf(prefix "\033[1m[INFO]\033[0m " __VA_ARGS__); \
   } while(0)
 

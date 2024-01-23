@@ -1,7 +1,1 @@
-#(2 + 2 * 2) #/ x
-#"Capybaras are cool!!"
-#(2 + 2 - 1)
-foo(2, 4, 6, 8 + 10)
-#"This is a string!"
-#let x = 5 + 6
-#x
+let main () = 5 + 6

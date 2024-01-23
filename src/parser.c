@@ -177,6 +177,53 @@ static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence);
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
+static Expr parser_parse_let(Parser *parser) {
+  Expr expr;
+  Args args = {0};
+  bool fun;
+
+  Token name = parser_expect_token(parser, TokenKindIdent);
+
+  if (parser_peek_token(parser).kind == TokenKindOParen) {
+    fun = true;
+
+    parser_next_token(parser);
+
+    while (parser_peek_token(parser).kind != TokenKindCParen) {
+      Token arg_name = parser_expect_token(parser, TokenKindIdent);
+      DA_APPEND(args, arg_name.str);
+
+      if (parser_peek_token(parser).kind != TokenKindCParen)
+        parser_expect_token(parser, TokenKindArgSep);
+    }
+
+    parser_next_token(parser);
+  }
+
+  Token op = parser_expect_token(parser, TokenKindOp);
+  if (!str_eq(op.str, STR("=", 1))) {
+    PERROR("%s:%d:%d: ", "Expected `=` in `let` expression\n",
+           parser->file_path, op.row, op.col);
+    exit(1);
+  }
+  Expr value = parser_parse_expr(parser, 0);
+
+  if (fun) {
+    expr.kind = ExprKindFun;
+    expr.as.fun = malloc(sizeof(ExprFun));
+    expr.as.fun->name = name.str;
+    expr.as.fun->args = args;
+    expr.as.fun->body = value;
+  } else {
+    expr.kind = ExprKindVar;
+    expr.as.var = malloc(sizeof(ExprVar));
+    expr.as.var->name = name.str;
+    expr.as.var->value = value;
+  }
+
+  return expr;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_expect_token(parser,
@@ -201,22 +248,9 @@ static Expr parser_parse_lhs(Parser *parser) {
       lhs.kind = ExprKindCall;
       lhs.as.call = malloc(sizeof(ExprCall));
       lhs.as.call->name = token.str;
-      lhs.as.call->args = *args.as.block;
-      free(args.as.block);
+      lhs.as.call->args = args.as.block;
     } else if (str_eq(token.str, STR("let", 3))) {
-      Token name = parser_expect_token(parser, TokenKindIdent);
-      Token op = parser_expect_token(parser, TokenKindOp);
-      if (!str_eq(op.str, STR("=", 1))) {
-        PERROR("%s:%d:%d: ", "Expected `=` in `let` expression\n",
-               parser->file_path, op.row, op.col);
-        exit(1);
-      }
-      Expr value = parser_parse_expr(parser, 0);
-
-      lhs.kind = ExprKindVar;
-      lhs.as.var = malloc(sizeof(ExprVar));
-      lhs.as.var->name = name.str;
-      lhs.as.var->value = value;
+      lhs = parser_parse_let(parser);
     } else {
       lhs.kind = ExprKindIdent;
       lhs.as.ident = malloc(sizeof(ExprIdent));
