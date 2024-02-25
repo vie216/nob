@@ -121,21 +121,18 @@ static void add_metadata_to_expr(Checker *checker, Expr *expr, bool top_level) {
 }
 
 static void verify_top_level_items(Checker *checker, Expr *expr) {
-  for (i32 i = 0; i < expr->as.block->len; ++i) {
-    Expr *_expr = expr->as.block->items + i;
-
-    if (_expr->kind == ExprKindBlock) {
-      verify_top_level_items(checker, _expr);
-    } else if (_expr->kind == ExprKindFunc) {
-      Binding bind = {
-        _expr->as.var->name,
-        *_expr,
-      };
-      DA_APPEND(checker->binds, bind);
-    } else {
-      ERROR("Only function definitions are supported on the top level for now\n");
-      checker->has_error = true;
-    }
+  if (expr->kind == ExprKindBlock) {
+    for (i32 i = 0; i < expr->as.block->len; ++i)
+      verify_top_level_items(checker, expr->as.block->items + i);
+  } else if (expr->kind == ExprKindFunc) {
+    Binding bind = {
+      expr->as.var->name,
+      *expr,
+    };
+    DA_APPEND(checker->binds, bind);
+  } else {
+    ERROR("Only function definitions are supported on the top level for now\n");
+    checker->has_error = true;
   }
 }
 

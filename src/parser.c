@@ -33,16 +33,16 @@ typedef struct {
   Token  last_token;
 } Parser;
 
-#define IS_OP(ch) !(isalnum(ch) || isspace(ch)  \
-                    || ch == '"' || ch == '\''  \
-                    || ch == '(' || ch == ')'   \
-                    || ch == '{' || ch == '}'   \
-                    || ch == '[' || ch == ']'   \
-                    || ch == ';' || ch == ':'   \
+#define IS_OP(ch) !(isalnum(ch) || isspace(ch) \
+                    || ch == '"' || ch == '\'' \
+                    || ch == '(' || ch == ')'  \
+                    || ch == '{' || ch == '}'  \
+                    || ch == '[' || ch == ']'  \
+                    || ch == ';' || ch == ':'  \
                     || ch == '#' || ch == ',')
 #define IS_EXPR_END(token) ((token).kind == TokenKindIntLit     \
-                            || (token).kind == TokenKindStrLit   \
-                            || (token).kind == TokenKindIdent  \
+                            || (token).kind == TokenKindStrLit  \
+                            || (token).kind == TokenKindIdent   \
                             || (token).kind == TokenKindCParen)
 #define IS_IDENT(ch) (isalpha(ch) || ch == '_')
 
@@ -342,6 +342,13 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
   }
 
   parser_next_token(parser);
+
+  if (block.as.block->len == 1) {
+    Expr expr = block.as.block->items[0];
+    free(block.as.block->items);
+    free(block.as.block);
+    return expr;
+  }
 
   return block;
 }
