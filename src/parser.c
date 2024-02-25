@@ -15,6 +15,8 @@ typedef enum {
   TokenKindOParen = 1 << 5,
   TokenKindCParen = 1 << 6,
   TokenKindComma  = 1 << 7,
+  TokenKindColon  = 1 << 8,
+  TokenKindCount  = 9,
 } TokenKind;
 
 typedef struct {
@@ -120,7 +122,9 @@ static Token parser_next_token(Parser *parser) {
   } else if (*start == ')') {
     kind = TokenKindCParen;
   } else if (*start == ',') {
-    kind = TokenKindComma ;
+    kind = TokenKindComma;
+  } else if (*start == ':') {
+    kind = TokenKindColon;
   } else if (*start == '"') {
     kind = TokenKindStrLit;
     bool escaped = false;
@@ -164,10 +168,44 @@ static Token parser_peek_token(Parser *parser) {
   return token;
 }
 
+static char *token_kind_names[TokenKindCount] = {
+  "integer", "string", "operator",
+  "semicolon", "identifier", "left paren",
+  "right paren", "comma", "colon",
+};
+
+static void print_expected_token_kind(TokenKind expected_kind) {
+  char *prev_str = NULL;
+  bool printed = false;
+
+  for (i32 i = 0; i < TokenKindCount; ++i) {
+    if (expected_kind & (1 << i)) {
+      if (prev_str) {
+        if (printed)
+          fputs(", ", stderr);
+        fputs(prev_str, stderr);
+
+        printed = true;
+      }
+
+      prev_str = token_kind_names[i];
+    }
+  }
+
+  if (prev_str) {
+    if (printed)
+      fputs(" or ", stderr);
+    fputs(prev_str, stderr);
+  }
+}
+
 static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   Token token = parser_next_token(parser);
   if (!(token.kind & expected_kind)) {
-    PERROR("%s:%d:%d: ", "Unexpected token\n", parser->file_path, token.row, token.col);
+    PERROR("%s:%d:%d: ", "Unexpected token, expected ",
+           parser->file_path, token.row, token.col);
+    print_expected_token_kind(expected_kind);
+    putc('\n', stderr);
     exit(1);
   }
 
