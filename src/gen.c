@@ -304,10 +304,10 @@ char *gen_linux_x86_64(Functions funcs) {
   for (i32 i = 0; i < funcs.len; ++i) {
     sb_push_str(&gen.sb, funcs.items[i]->name);
     sb_push(&gen.sb, ":\n");
-    sb_push(&gen.sb, "    push rbp\n");
-    sb_push(&gen.sb, "    mov rbp, rsp\n");
 
     if (funcs.items[i]->scope_size != 0) {
+      sb_push(&gen.sb, "    push rbp\n");
+      sb_push(&gen.sb, "    mov rbp, rsp\n");
       sb_push(&gen.sb, "    sub rsp, ");
       sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
       sb_push(&gen.sb, "\n");
@@ -320,9 +320,9 @@ char *gen_linux_x86_64(Functions funcs) {
       sb_push(&gen.sb, "    add rsp, ");
       sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
       sb_push(&gen.sb, "\n");
+      sb_push(&gen.sb, "    pop rbp\n");
     }
 
-    sb_push(&gen.sb, "    pop rbp\n");
     sb_push(&gen.sb, "    ret\n");
 
     gen.scope_size = 0;
