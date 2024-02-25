@@ -6,6 +6,7 @@
 #include "str.h"
 #include "log.h"
 #include "parser.h"
+#include "checker.h"
 #include "gen.h"
 
 void parse_args(int argc, char **argv,
@@ -91,14 +92,15 @@ void assemble(char *asm_path) {
 
 int main(int argc, char **argv) {
   char *input_path, *output_path;
-
   parse_args(argc, argv, &input_path, &output_path);
   Str source_code = read_file(input_path);
 
   INFO("Parsing\n");
   Expr program = parse_program(source_code, input_path);
+  INFO("Type checking\n");
+  Functions funcs = add_metadata(&program);
   INFO("Compiling\n");
-  char *_asm = gen_linux_x86_64(program);
+  char *_asm = gen_linux_x86_64(funcs);
   INFO("Assembling\n");
   char *asm_path = write_asm(output_path, _asm);
   assemble(asm_path);

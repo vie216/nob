@@ -59,6 +59,9 @@ struct ExprBlock {
 
 struct ExprIdent {
   Str ident;
+  // Metadata
+  Str  target_name;
+  Expr target_expr;
 };
 
 struct ExprCall {
@@ -69,6 +72,9 @@ struct ExprCall {
 struct ExprVar {
   Str  name;
   Expr value;
+  // Metadata
+  Str loc;
+  i32 size;
 };
 
 typedef struct {
@@ -80,6 +86,9 @@ struct ExprFunc {
   Str  name;
   Args args;
   Expr body;
+  // Metadata
+  Str loc;
+  i32 scope_size;
 };
 
 Expr parse_program(Str source, char *file_path);

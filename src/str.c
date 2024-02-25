@@ -37,19 +37,36 @@ void str_println(Str str) {
   str_fprintln(stdout, str);
 }
 
-void sb_push_str(StringBuilder *sb, Str str) {
-  if (str.len > sb->cap - sb->len) {
-    if (sb->cap) {
-      while (str.len > sb->cap - sb->len)
+static void sb_reserve_space(StringBuilder *sb, i32 amount) {
+  if (amount > sb->cap - sb->len) {
+    if (sb->cap != 0) {
+      while (amount > sb->cap - sb->len)
         sb->cap *= 2;
 
       sb->buffer = realloc(sb->buffer, sb->cap + 1);
     } else {
-      sb->cap += str.len;
+      sb->cap += amount;
       sb->buffer = malloc(sb->cap + 1);
     }
   }
+}
 
+void sb_push_i32(StringBuilder *sb, i32 num) {
+  i32 _num = num;
+  i32 len = 1;
+
+  while (_num >= 10) {
+    _num /= 10;
+    len++;
+  }
+
+  snprintf(sb->buffer + sb->len, len + 1, "%d", num);
+  sb->len += len;
+  sb->buffer[sb->len] = '\0';
+}
+
+void sb_push_str(StringBuilder *sb, Str str) {
+  sb_reserve_space(sb, str.len);
   memmove(sb->buffer + sb->len, str.ptr, str.len);
   sb->len += str.len;
   sb->buffer[sb->len] = '\0';
