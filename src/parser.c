@@ -10,11 +10,11 @@ typedef enum {
   TokenKindIntLit = 1 << 0,
   TokenKindStrLit = 1 << 1,
   TokenKindOp     = 1 << 2,
-  TokenKindSep    = 1 << 3,
+  TokenKindSemi   = 1 << 3,
   TokenKindIdent  = 1 << 4,
   TokenKindOParen = 1 << 5,
   TokenKindCParen = 1 << 6,
-  TokenKindArgSep = 1 << 7,
+  TokenKindComma  = 1 << 7,
 } TokenKind;
 
 typedef struct {
@@ -85,7 +85,7 @@ static Token parser_next_token(Parser *parser) {
 
       if (IS_EXPR_END(parser->last_token))
         return parser->last_token = (Token) {
-          .kind = TokenKindSep,
+          .kind = TokenKindSemi,
           .str = STR(";", 1),
           .row = parser->row + 1,
           .col = parser->current - parser->bol + 1,
@@ -110,7 +110,7 @@ static Token parser_next_token(Parser *parser) {
     while (!parser_eof(parser) && IS_OP(*parser->current))
       parser->current++;
   } else if (*start == ';') {
-    kind = TokenKindSep;
+    kind = TokenKindSemi;
   } else if (IS_IDENT(*start)) {
     kind = TokenKindIdent;
     while (!parser_eof(parser) && IS_IDENT(*parser->current))
@@ -120,10 +120,10 @@ static Token parser_next_token(Parser *parser) {
   } else if (*start == ')') {
     kind = TokenKindCParen;
   } else if (*start == ',') {
-    kind = TokenKindArgSep;
+    kind = TokenKindComma ;
   } else if (*start == '"') {
     kind = TokenKindStrLit;
-    bool escaped;
+    bool escaped = false;
     while (!parser_eof(parser) && (*parser->current != '"' || escaped)) {
       escaped = *parser->current == '\\';
       parser->current++;
@@ -180,12 +180,12 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
 static Expr parser_parse_let(Parser *parser) {
   Expr expr;
   Args args = {0};
-  bool fun;
+  bool func;
 
   Token name = parser_expect_token(parser, TokenKindIdent);
 
   if (parser_peek_token(parser).kind == TokenKindOParen) {
-    fun = true;
+    func = true;
 
     parser_next_token(parser);
 
@@ -194,7 +194,7 @@ static Expr parser_parse_let(Parser *parser) {
       DA_APPEND(args, arg_name.str);
 
       if (parser_peek_token(parser).kind != TokenKindCParen)
-        parser_expect_token(parser, TokenKindArgSep);
+        parser_expect_token(parser, TokenKindComma);
     }
 
     parser_next_token(parser);
@@ -208,12 +208,12 @@ static Expr parser_parse_let(Parser *parser) {
   }
   Expr value = parser_parse_expr(parser, 0);
 
-  if (fun) {
-    expr.kind = ExprKindFun;
-    expr.as.fun = malloc(sizeof(ExprFun));
-    expr.as.fun->name = name.str;
-    expr.as.fun->args = args;
-    expr.as.fun->body = value;
+  if (func) {
+    expr.kind = ExprKindFunc;
+    expr.as.func = malloc(sizeof(ExprFunc));
+    expr.as.func->name = name.str;
+    expr.as.func->args = args;
+    expr.as.func->body = value;
   } else {
     expr.kind = ExprKindVar;
     expr.as.var = malloc(sizeof(ExprVar));
@@ -241,15 +241,7 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.as.lit->kind = LitKindStr;
     lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
-    if (parser_peek_token(parser).kind == TokenKindOParen) {
-      parser_next_token(parser);
-      Expr args = parser_parse_block(parser, TokenKindArgSep, TokenKindCParen);
-
-      lhs.kind = ExprKindCall;
-      lhs.as.call = malloc(sizeof(ExprCall));
-      lhs.as.call->name = token.str;
-      lhs.as.call->args = args.as.block;
-    } else if (str_eq(token.str, STR("let", 3))) {
+    if (str_eq(token.str, STR("let", 3))) {
       lhs = parser_parse_let(parser);
     } else {
       lhs.kind = ExprKindIdent;
@@ -257,7 +249,18 @@ static Expr parser_parse_lhs(Parser *parser) {
       lhs.as.ident->ident = token.str;
     }
   } else if (token.kind == TokenKindOParen) {
-    lhs = parser_parse_block(parser, TokenKindSep, TokenKindCParen);
+    lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
+  }
+
+  if (parser_peek_token(parser).kind == TokenKindOParen) {
+    parser_next_token(parser);
+    Expr func = lhs;
+    Expr args = parser_parse_block(parser, TokenKindComma , TokenKindCParen);
+
+    lhs.kind = ExprKindCall;
+    lhs.as.call = malloc(sizeof(ExprCall));
+    lhs.as.call->func = func;
+    lhs.as.call->args = args.as.block;
   }
 
   return lhs;
@@ -315,5 +318,5 @@ Expr parse_program(Str source, char *file_path) {
     .last_token = (Token) { .kind = TokenKindNone },
   };
 
-  return parser_parse_block(&parser, TokenKindSep, TokenKindNone);
+  return parser_parse_block(&parser, TokenKindSemi, TokenKindNone);
 }

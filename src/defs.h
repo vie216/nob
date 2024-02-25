@@ -1,11 +1,13 @@
 #ifndef DEFS_H
 #define DEFS_H
 
+#include <stdlib.h>
+
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
 #define DA_APPEND(da, element)                                        \
   do {                                                                \
     if ((da).cap <= (da).len) {                                       \
-      if ((da).cap) {                                                 \
+      if ((da).cap != 0) {                                            \
         while ((da).cap <= (da).len)                                  \
           (da).cap *= 2;                                              \
         (da).items = realloc((da).items, sizeof(element) * (da).cap); \
