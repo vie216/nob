@@ -19,14 +19,22 @@ bool str_eq(Str a, Str b) {
   return true;
 }
 
-void str_print(Str str) {
+void str_fprint(FILE *stream, Str str) {
   for (i32 i = 0; i < str.len; ++i)
-    putc(str.ptr[i], stdout);
+    putc(str.ptr[i], stream);
+}
+
+void str_fprintln(FILE *stream, Str str) {
+  str_fprint(stream, str);
+  putc('\n', stream);
+}
+
+void str_print(Str str) {
+  str_fprint(stdout, str);
 }
 
 void str_println(Str str) {
-  str_print(str);
-  putc('\n', stdout);
+  str_fprintln(stdout, str);
 }
 
 void sb_push_str(StringBuilder *sb, Str str) {

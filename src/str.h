@@ -1,6 +1,8 @@
 #ifndef STR_H
 #define STR_H
 
+#include <stdio.h>
+
 #include "defs.h"
 
 #define STR(ptr, len) ((Str) { ptr, len })
@@ -12,6 +14,8 @@ typedef struct {
 
 Str str_new(char *str);
 bool str_eq(Str a, Str b);
+void str_fprint(FILE *stream, Str str);
+void str_fprintln(FILE *stream, Str str);
 void str_print(Str str);
 void str_println(Str str);
 
