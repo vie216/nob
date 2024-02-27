@@ -305,7 +305,7 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
       sb_push_i32(&gen->sb, gen->ifs_count);
       sb_push(&gen->sb, "\n");
     }
-    sb_push(&gen->sb, "else_");
+    sb_push(&gen->sb, "  else_");
     sb_push_i32(&gen->sb, gen->ifs_count);
     sb_push(&gen->sb, ":\n");
 
@@ -315,7 +315,7 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
         mem_free(&gen->mem, body.str);
     }
 
-    sb_push(&gen->sb, "next_");
+    sb_push(&gen->sb, "  next_");
     sb_push_i32(&gen->sb, gen->ifs_count);
     sb_push(&gen->sb, ":\n");
 
