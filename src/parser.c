@@ -262,6 +262,18 @@ static Expr parser_parse_let(Parser *parser) {
   return expr;
 }
 
+static Expr parser_parse_if(Parser *parser) {
+  Expr eef;
+
+  eef.kind = ExprKindIf;
+  eef.as.eef = malloc(sizeof(ExprIf));
+  eef.as.eef->cond = parser_parse_expr(parser, 0);
+  parser_expect_token(parser, TokenKindColon);
+  eef.as.eef->body = parser_parse_expr(parser, 0);
+
+  return eef;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_expect_token(parser,
@@ -281,6 +293,8 @@ static Expr parser_parse_lhs(Parser *parser) {
   } else if (token.kind == TokenKindIdent) {
     if (str_eq(token.str, STR("let", 3))) {
       lhs = parser_parse_let(parser);
+    } else if (str_eq(token.str, STR("if", 2))) {
+      lhs = parser_parse_if(parser);
     } else {
       lhs.kind = ExprKindIdent;
       lhs.as.ident = malloc(sizeof(ExprIdent));

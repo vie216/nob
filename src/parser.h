@@ -11,6 +11,7 @@ typedef enum {
   ExprKindCall,
   ExprKindVar,
   ExprKindFunc,
+  ExprKindIf,
 } ExprKind;
 
 typedef struct ExprBinOp ExprBinOp;
@@ -20,6 +21,7 @@ typedef struct ExprIdent ExprIdent;
 typedef struct ExprCall  ExprCall;
 typedef struct ExprVar   ExprVar;
 typedef struct ExprFunc  ExprFunc;
+typedef struct ExprIf    ExprIf;
 
 typedef union {
   ExprBinOp *bin_op;
@@ -29,6 +31,7 @@ typedef union {
   ExprCall  *call;
   ExprVar   *var;
   ExprFunc  *func;
+  ExprIf    *eef;
 } ExprAs;
 
 typedef struct {
@@ -89,6 +92,11 @@ struct ExprFunc {
   // Metadata
   Str loc;
   i32 scope_size;
+};
+
+struct ExprIf {
+  Expr cond;
+  Expr body;
 };
 
 Expr parse_program(Str source, char *file_path);

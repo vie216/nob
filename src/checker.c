@@ -113,6 +113,11 @@ static void add_metadata_to_expr(Checker *checker, Expr *expr, bool top_level) {
     checker->func_scope_size = prev_func_scope_size;
   } break;
 
+  case ExprKindIf: {
+    add_metadata_to_expr(checker, &expr->as.eef->cond, false);
+    add_metadata_to_expr(checker, &expr->as.eef->body, false);
+  } break;
+
   default: {
     ERROR("Not implemented\n");
     exit(1);

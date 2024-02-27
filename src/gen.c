@@ -95,7 +95,7 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
 
     if (expr.as.block->len > 0)
       return gen_expr_linux_x86_64(gen, expr.as.block->items[expr.as.block->len - 1], target);
-    return LOC(LocKindAny, {0});
+    return LOC(LocKindAny, STR("rax", 3));
   }
 
   case ExprKindLit: {
@@ -160,7 +160,7 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
         || str_eq(expr.as.bin_op->op, STR("-", 1))
         || str_eq(expr.as.bin_op->op, STR("*", 1))) {
       if (target.kind == LocKindAny)
-        target.kind = LocKindRegOrMem;
+        target.kind = LocKindReg;
 
       Loc lhs = gen_expr_linux_x86_64(gen, expr.as.bin_op->lhs, target);
       Loc rhs = gen_expr_linux_x86_64(gen, expr.as.bin_op->rhs, LOC(LocKindAny, {0}));
@@ -281,6 +281,25 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
     sb_push(&gen->sb, "\n");
 
     return target;
+  }
+
+  case ExprKindIf: {
+    Loc cond = gen_expr_linux_x86_64(gen, expr.as.eef->cond, LOC(LocKindRegOrMem, {0}));
+    if (cond.kind == LocKindRegOrMem || cond.kind == LocKindReg)
+      mem_free(&gen->mem, cond.str);
+
+    sb_push(&gen->sb, "    cmp ");
+    sb_push_str(&gen->sb, cond.str);
+    sb_push(&gen->sb, ", 0\n");
+    sb_push(&gen->sb, "    je eef\n");
+
+    Loc body = gen_expr_linux_x86_64(gen, expr.as.eef->body, LOC(LocKindAny, {0}));
+    if (body.kind == LocKindRegOrMem || body.kind == LocKindReg)
+      mem_free(&gen->mem, body.str);
+
+    sb_push(&gen->sb, "eef:\n");
+
+    return LOC(LocKindAny, STR("rax", 3));
   }
   }
 
