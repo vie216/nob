@@ -356,12 +356,8 @@ char *gen_linux_x86_64(Functions funcs) {
     gen_expr_linux_x86_64(&gen, funcs.items[i]->body,
                           LOC(LocKindCertain, STR("rax", 3)));
 
-    if (funcs.items[i]->scope_size != 0) {
-      sb_push(&gen.sb, "    add rsp, ");
-      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
-      sb_push(&gen.sb, "\n");
-      sb_push(&gen.sb, "    pop rbp\n");
-    }
+    if (funcs.items[i]->scope_size != 0)
+      sb_push(&gen.sb, "    leave\n");
 
     sb_push(&gen.sb, "    ret\n");
 
