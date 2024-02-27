@@ -116,6 +116,8 @@ static void add_metadata_to_expr(Checker *checker, Expr *expr, bool top_level) {
   case ExprKindIf: {
     add_metadata_to_expr(checker, &expr->as.eef->cond, false);
     add_metadata_to_expr(checker, &expr->as.eef->body, false);
+    if (expr->as.eef->has_else)
+      add_metadata_to_expr(checker, &expr->as.eef->elze, false);
   } break;
 
   default: {

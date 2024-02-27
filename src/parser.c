@@ -270,6 +270,17 @@ static Expr parser_parse_if(Parser *parser) {
   eef.as.eef->cond = parser_parse_expr(parser, 0);
   parser_expect_token(parser, TokenKindColon);
   eef.as.eef->body = parser_parse_expr(parser, 0);
+  eef.as.eef->has_else = false;
+
+  parser_expect_token(parser, TokenKindSemi);
+
+  Token token = parser_peek_token(parser);
+  if (token.kind == TokenKindIdent && str_eq(token.str, STR("else", 4))) {
+    parser_next_token(parser);
+    parser_expect_token(parser, TokenKindColon);
+    eef.as.eef->elze = parser_parse_expr(parser, 0);
+    eef.as.eef->has_else = true;
+  }
 
   return eef;
 }

@@ -68,6 +68,7 @@ typedef struct {
   Memory        mem;
   DBs           dbs;
   i32           scope_size;
+  i32           ifs_count;
 } Generator;
 
 typedef enum {
@@ -291,15 +292,35 @@ static Loc gen_expr_linux_x86_64(Generator *gen, Expr expr, Loc target) {
     sb_push(&gen->sb, "    cmp ");
     sb_push_str(&gen->sb, cond.str);
     sb_push(&gen->sb, ", 0\n");
-    sb_push(&gen->sb, "    je eef\n");
+    sb_push(&gen->sb, "    je else_");
+    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push(&gen->sb, "\n");
 
-    Loc body = gen_expr_linux_x86_64(gen, expr.as.eef->body, LOC(LocKindAny, {0}));
+    Loc body = gen_expr_linux_x86_64(gen, expr.as.eef->body, target);
     if (body.kind == LocKindRegOrMem || body.kind == LocKindReg)
       mem_free(&gen->mem, body.str);
 
-    sb_push(&gen->sb, "eef:\n");
+    if (expr.as.eef->has_else) {
+      sb_push(&gen->sb, "    jmp next_");
+      sb_push_i32(&gen->sb, gen->ifs_count);
+      sb_push(&gen->sb, "\n");
+    }
+    sb_push(&gen->sb, "else_");
+    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push(&gen->sb, ":\n");
 
-    return LOC(LocKindAny, STR("rax", 3));
+    if (expr.as.eef->has_else) {
+      Loc elze = gen_expr_linux_x86_64(gen, expr.as.eef->elze, target);
+      if (elze.kind == LocKindRegOrMem || elze.kind == LocKindReg)
+        mem_free(&gen->mem, body.str);
+    }
+
+    sb_push(&gen->sb, "next_");
+    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push(&gen->sb, ":\n");
+
+    gen->ifs_count++;
+    return target;
   }
   }
 

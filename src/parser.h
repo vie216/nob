@@ -97,6 +97,8 @@ struct ExprFunc {
 struct ExprIf {
   Expr cond;
   Expr body;
+  Expr elze;
+  bool has_else;
 };
 
 Expr parse_program(Str source, char *file_path);

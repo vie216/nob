@@ -1,9 +1,9 @@
 let func() = (
   let x = 5
   let y = x + 6
-  if 1:
-    y + 2
-  y
+
+  if 1: y
+  else: x
 )
 
 let main() = func()
