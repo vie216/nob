@@ -1,9 +1,9 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
 
 #include "parser.h"
 #include "log.h"
+#include "arena.h"
 
 typedef enum {
   TokenKindNone   = 0,
@@ -248,13 +248,13 @@ static Expr parser_parse_let(Parser *parser) {
 
   if (func) {
     expr.kind = ExprKindFunc;
-    expr.as.func = malloc(sizeof(ExprFunc));
+    expr.as.func = aalloc(sizeof(ExprFunc));
     expr.as.func->name = name.str;
     expr.as.func->args = args;
     expr.as.func->body = value;
   } else {
     expr.kind = ExprKindVar;
-    expr.as.var = malloc(sizeof(ExprVar));
+    expr.as.var = aalloc(sizeof(ExprVar));
     expr.as.var->name = name.str;
     expr.as.var->value = value;
   }
@@ -266,7 +266,7 @@ static Expr parser_parse_if(Parser *parser) {
   Expr eef;
 
   eef.kind = ExprKindIf;
-  eef.as.eef = malloc(sizeof(ExprIf));
+  eef.as.eef = aalloc(sizeof(ExprIf));
   eef.as.eef->cond = parser_parse_expr(parser, 0);
   parser_expect_token(parser, TokenKindColon);
   eef.as.eef->body = parser_parse_expr(parser, 0);
@@ -293,12 +293,12 @@ static Expr parser_parse_lhs(Parser *parser) {
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
-    lhs.as.lit = malloc(sizeof(ExprLit));
+    lhs.as.lit = aalloc(sizeof(ExprLit));
     lhs.as.lit->kind = LitKindInt;
     lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindStrLit) {
     lhs.kind = ExprKindLit;
-    lhs.as.lit = malloc(sizeof(ExprLit));
+    lhs.as.lit = aalloc(sizeof(ExprLit));
     lhs.as.lit->kind = LitKindStr;
     lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
@@ -308,7 +308,7 @@ static Expr parser_parse_lhs(Parser *parser) {
       lhs = parser_parse_if(parser);
     } else {
       lhs.kind = ExprKindIdent;
-      lhs.as.ident = malloc(sizeof(ExprIdent));
+      lhs.as.ident = aalloc(sizeof(ExprIdent));
       lhs.as.ident->ident = token.str;
     }
   } else if (token.kind == TokenKindOParen) {
@@ -321,7 +321,7 @@ static Expr parser_parse_lhs(Parser *parser) {
     Expr args = parser_parse_block(parser, TokenKindComma , TokenKindCParen);
 
     lhs.kind = ExprKindCall;
-    lhs.as.call = malloc(sizeof(ExprCall));
+    lhs.as.call = aalloc(sizeof(ExprCall));
     lhs.as.call->func = func;
     lhs.as.call->args = args.as.block;
   }
@@ -340,7 +340,7 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
       break;
     parser_next_token(parser);
 
-    expr = malloc(sizeof(ExprBinOp));
+    expr = aalloc(sizeof(ExprBinOp));
     expr->op = token.str;
     expr->lhs = lhs;
     expr->rhs = parser_parse_expr(parser, precedence);
@@ -354,7 +354,7 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with) {
   Expr block;
   block.kind = ExprKindBlock;
-  block.as.block = malloc(sizeof(ExprBlock));
+  block.as.block = aalloc(sizeof(ExprBlock));
   block.as.block->len = 0;
   block.as.block->cap = 0;
 
@@ -371,7 +371,6 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
   if (block.as.block->len == 1) {
     Expr expr = block.as.block->items[0];
     free(block.as.block->items);
-    free(block.as.block);
     return expr;
   }
 
