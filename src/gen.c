@@ -4,8 +4,8 @@
 #include "gen.h"
 #include "log.h"
 
-static Str reg_names[] = { STR("rbx", 3), STR("r10", 3), STR("r11", 3), STR("r12", 3),
-                           STR("r13", 3), STR("r14", 3), STR("r15", 3) };
+static Str reg_names[] = { STR("rbx", 3), STR("r12", 3), STR("r13", 3),
+                           STR("r14", 3), STR("r15", 3) };
 static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
                                STR("rcx", 3), STR("r8", 2),  STR("r9", 2) };
 
@@ -344,7 +344,6 @@ char *gen_linux_x86_64(Functions funcs) {
   for (i32 i = 0; i < funcs.len; ++i) {
     sb_push_str(&gen.sb, funcs.items[i]->name);
     sb_push(&gen.sb, ":\n");
-
     if (funcs.items[i]->scope_size != 0) {
       sb_push(&gen.sb, "    push rbp\n");
       sb_push(&gen.sb, "    mov rbp, rsp\n");
@@ -358,7 +357,6 @@ char *gen_linux_x86_64(Functions funcs) {
 
     if (funcs.items[i]->scope_size != 0)
       sb_push(&gen.sb, "    leave\n");
-
     sb_push(&gen.sb, "    ret\n");
 
     gen.scope_size = 0;
