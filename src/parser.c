@@ -6,17 +6,18 @@
 #include "arena.h"
 
 typedef enum {
-  TokenKindNone   = 0,
-  TokenKindIntLit = 1 << 0,
-  TokenKindStrLit = 1 << 1,
-  TokenKindOp     = 1 << 2,
-  TokenKindSemi   = 1 << 3,
-  TokenKindIdent  = 1 << 4,
-  TokenKindOParen = 1 << 5,
-  TokenKindCParen = 1 << 6,
-  TokenKindComma  = 1 << 7,
-  TokenKindColon  = 1 << 8,
-  TokenKindCount  = 10,
+  TokenKindNone   =  1 << 0,
+  TokenKindIntLit =  1 << 1,
+  TokenKindStrLit =  1 << 2,
+  TokenKindOp     =  1 << 3,
+  TokenKindSemi   =  1 << 4,
+  TokenKindIdent  =  1 << 5,
+  TokenKindOParen =  1 << 6,
+  TokenKindCParen =  1 << 7,
+  TokenKindComma  =  1 << 8,
+  TokenKindColon  =  1 << 9,
+  TokenKindKeyword = 1 << 10,
+  TokenKindCount  = 11,
 } TokenKind;
 
 typedef struct {
@@ -70,6 +71,19 @@ static i32 op_precedence(Str op) {
   return 3;
 }
 
+static bool is_keyword(Str str) {
+  static Str keywords[] = {
+    STR("let", 3),
+    STR("if", 2),
+    STR("else", 4),
+  };
+
+  for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i)
+    if (str_eq(keywords[i], str))
+      return true;
+  return false;
+}
+
 static bool parser_eof(Parser *parser) {
   return parser->current >= parser->source.ptr + parser->source.len;
 }
@@ -100,7 +114,11 @@ static Token parser_next_token(Parser *parser) {
   }
 
   if (parser_eof(parser))
-    return (Token) { .kind = TokenKindNone };
+    return (Token) {
+      .kind = TokenKindNone,
+      .row = parser->row + 1,
+      .col = parser->current - parser->bol + 1,
+    };
 
   TokenKind kind = TokenKindNone;
   char *start = parser->current++;
@@ -119,6 +137,8 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindIdent;
     while (!parser_eof(parser) && IS_IDENT(*parser->current))
       parser->current++;
+    bool keyword = is_keyword(STR(start, parser->current - start));
+    kind = keyword ? TokenKindKeyword : TokenKindIdent;
   } else if (*start == '(') {
     kind = TokenKindOParen;
   } else if (*start == ')') {
@@ -173,6 +193,7 @@ static Token parser_peek_token(Parser *parser) {
 static char *token_kind_names[TokenKindCount] = {
   "end of file", "integer", "string", "operator", "semicolon",
   "identifier", "left paren", "right paren", "comma", "colon",
+  "keyword",
 };
 
 static void print_token_kind(TokenKind token_kind) {
@@ -278,7 +299,7 @@ static Expr parser_parse_if(Parser *parser) {
   parser_expect_token(parser, TokenKindSemi);
 
   Token token = parser_peek_token(parser);
-  if (token.kind == TokenKindIdent && str_eq(token.str, STR("else", 4))) {
+  if (token.kind == TokenKindKeyword && str_eq(token.str, STR("else", 4))) {
     parser_next_token(parser);
     parser_expect_token(parser, TokenKindColon);
     eef.as.eef->elze = parser_parse_expr(parser, 0);
@@ -292,7 +313,8 @@ static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_expect_token(parser,
                               TokenKindIntLit | TokenKindIdent |
-                              TokenKindOParen | TokenKindStrLit);
+                              TokenKindOParen | TokenKindStrLit |
+                              TokenKindKeyword);
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
@@ -305,17 +327,17 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.as.lit->kind = LitKindStr;
     lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
+    lhs.kind = ExprKindIdent;
+    lhs.as.ident = aalloc(sizeof(ExprIdent));
+    lhs.as.ident->ident = token.str;
+  } else if (token.kind == TokenKindOParen) {
+    lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
+  } else if (token.kind == TokenKindKeyword) {
     if (str_eq(token.str, STR("let", 3))) {
       lhs = parser_parse_let(parser);
     } else if (str_eq(token.str, STR("if", 2))) {
       lhs = parser_parse_if(parser);
-    } else {
-      lhs.kind = ExprKindIdent;
-      lhs.as.ident = aalloc(sizeof(ExprIdent));
-      lhs.as.ident->ident = token.str;
     }
-  } else if (token.kind == TokenKindOParen) {
-    lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
   }
 
   if (parser_peek_token(parser).kind == TokenKindOParen) {
