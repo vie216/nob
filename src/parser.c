@@ -16,7 +16,7 @@ typedef enum {
   TokenKindCParen = 1 << 6,
   TokenKindComma  = 1 << 7,
   TokenKindColon  = 1 << 8,
-  TokenKindCount  = 9,
+  TokenKindCount  = 10,
 } TokenKind;
 
 typedef struct {
@@ -85,13 +85,15 @@ static Token parser_next_token(Parser *parser) {
       parser->bol = parser->current + 1;
       parser->row++;
 
-      if (IS_EXPR_END(parser->last_token))
+      if (IS_EXPR_END(parser->last_token)) {
+        parser->current++;
         return parser->last_token = (Token) {
           .kind = TokenKindSemi,
           .str = STR(";", 1),
           .row = parser->row + 1,
           .col = parser->current - parser->bol + 1,
         };
+      }
     }
 
     parser->current++;
@@ -169,17 +171,16 @@ static Token parser_peek_token(Parser *parser) {
 }
 
 static char *token_kind_names[TokenKindCount] = {
-  "integer", "string", "operator",
-  "semicolon", "identifier", "left paren",
-  "right paren", "comma", "colon",
+  "end of file", "integer", "string", "operator", "semicolon",
+  "identifier", "left paren", "right paren", "comma", "colon",
 };
 
-static void print_expected_token_kind(TokenKind expected_kind) {
+static void print_token_kind(TokenKind token_kind) {
   char *prev_str = NULL;
   bool printed = false;
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
-    if (expected_kind & (1 << i)) {
+    if (token_kind & (1 << i)) {
       if (prev_str) {
         if (printed)
           fputs(", ", stderr);
@@ -202,9 +203,11 @@ static void print_expected_token_kind(TokenKind expected_kind) {
 static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   Token token = parser_next_token(parser);
   if (!(token.kind & expected_kind)) {
-    PERROR("%s:%d:%d: ", "Unexpected token, expected ",
+    PERROR("%s:%d:%d: ", "Unexpected ",
            parser->file_path, token.row, token.col);
-    print_expected_token_kind(expected_kind);
+    print_token_kind(token.kind);
+    fputs(", expected ", stderr);
+    print_token_kind(expected_kind);
     putc('\n', stderr);
     exit(1);
   }
