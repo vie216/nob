@@ -6,18 +6,18 @@
 #include "arena.h"
 
 typedef enum {
-  TokenKindNone   =  1 << 0,
-  TokenKindIntLit =  1 << 1,
-  TokenKindStrLit =  1 << 2,
-  TokenKindOp     =  1 << 3,
-  TokenKindSemi   =  1 << 4,
-  TokenKindIdent  =  1 << 5,
-  TokenKindOParen =  1 << 6,
-  TokenKindCParen =  1 << 7,
-  TokenKindComma  =  1 << 8,
-  TokenKindColon  =  1 << 9,
-  TokenKindKeyword = 1 << 10,
-  TokenKindCount  = 11,
+  TokenKindNone    = 1 << 0,
+  TokenKindIntLit  = 1 << 1,
+  TokenKindStrLit  = 1 << 2,
+  TokenKindOp      = 1 << 3,
+  TokenKindSemi    = 1 << 4,
+  TokenKindIdent   = 1 << 5,
+  TokenKindKeyword = 1 << 6,
+  TokenKindOParen  = 1 << 7,
+  TokenKindCParen  = 1 << 8,
+  TokenKindComma   = 1 << 9,
+  TokenKindColon   = 1 << 10,
+  TokenKindCount   = 11,
 } TokenKind;
 
 typedef struct {
@@ -104,8 +104,8 @@ static Token parser_next_token(Parser *parser) {
         return parser->last_token = (Token) {
           .kind = TokenKindSemi,
           .str = STR(";", 1),
-          .row = parser->row + 1,
-          .col = parser->current - parser->bol + 1,
+          .row = -1,
+          .col = -1,
         };
       }
     }
@@ -192,8 +192,8 @@ static Token parser_peek_token(Parser *parser) {
 
 static char *token_kind_names[TokenKindCount] = {
   "end of file", "integer", "string", "operator", "semicolon",
-  "identifier", "left paren", "right paren", "comma", "colon",
-  "keyword",
+  "identifier", "keyword", "left paren", "right paren", "comma",
+  "colon",
 };
 
 static void print_token_kind(TokenKind token_kind) {
@@ -224,6 +224,9 @@ static void print_token_kind(TokenKind token_kind) {
 static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   Token token = parser_next_token(parser);
   if (!(token.kind & expected_kind)) {
+    if (token.row == -1 || token.col == -1)
+      token = parser_next_token(parser);
+
     PERROR("%s:%d:%d: ", "Unexpected ",
            parser->file_path, token.row, token.col);
     print_token_kind(token.kind);
@@ -245,11 +248,10 @@ static Expr parser_parse_let(Parser *parser) {
   bool func;
 
   Token name = parser_expect_token(parser, TokenKindIdent);
+  Token token = parser_expect_token(parser, TokenKindOParen | TokenKindOp);
 
-  if (parser_peek_token(parser).kind == TokenKindOParen) {
+  if (token.kind == TokenKindOParen) {
     func = true;
-
-    parser_next_token(parser);
 
     while (parser_peek_token(parser).kind != TokenKindCParen) {
       Token arg_name = parser_expect_token(parser, TokenKindIdent);
@@ -260,12 +262,14 @@ static Expr parser_parse_let(Parser *parser) {
     }
 
     parser_next_token(parser);
+    token = parser_expect_token(parser, TokenKindOp);
   }
 
-  Token op = parser_expect_token(parser, TokenKindOp);
-  if (!str_eq(op.str, STR("=", 1))) {
-    PERROR("%s:%d:%d: ", "Expected `=` in `let` expression\n",
-           parser->file_path, op.row, op.col);
+  if (!str_eq(token.str, STR("=", 1))) {
+    PERROR("%s:%d:%d: ", "Unexpected ",
+           parser->file_path, token.row, token.col);
+    print_token_kind(token.kind);
+    fputs(", expected `=` in `let` expression\n", stderr);
     exit(1);
   }
   Expr value = parser_parse_expr(parser, 0);
