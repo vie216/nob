@@ -140,10 +140,20 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
     if (str_eq(expr.as.bin_op->op, STR("+", 1))
         || str_eq(expr.as.bin_op->op, STR("-", 1))
         || str_eq(expr.as.bin_op->op, STR("*", 1))) {
-      Str lhs = gen_expr_linux_x86_64(gen, expr.as.bin_op->lhs, target, true);
+      /* Yes, I didn't come up with a better name */
+      bool flag = str_eq(target, STR("rax", 3)) &&
+                  expr.as.bin_op->rhs.kind == ExprKindCall;
+
+      Str lhs_loc = target;
+      if (flag)
+        lhs_loc = mem_reserve(&gen->mem);
+      Str lhs = gen_expr_linux_x86_64(gen, expr.as.bin_op->lhs, lhs_loc, true);
+
       Str rhs_loc = mem_reserve(&gen->mem);
       Str rhs = gen_expr_linux_x86_64(gen, expr.as.bin_op->rhs,
                                       rhs_loc, false);
+
+      mem_free(&gen->mem, lhs_loc);
       mem_free(&gen->mem, rhs_loc);
 
       if (str_eq(expr.as.bin_op->op, STR("+", 1)))
@@ -156,6 +166,12 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, rhs);
       sb_push(&gen->sb, "\n");
+
+      if (flag) {
+        sb_push(&gen->sb, "    mov rax, ");
+        sb_push_str(&gen->sb, lhs_loc);
+        sb_push(&gen->sb, "\n");
+      }
 
       return lhs;
     }
@@ -231,7 +247,7 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
     }
 
     mem_free_args(&gen->mem);
-    return target;
+    return strict ? target : STR("rax", 3);
   }
 
   case ExprKindFunc: {
@@ -312,8 +328,18 @@ char *gen_linux_x86_64(Functions funcs) {
       sb_push(&gen.sb, "\n");
     }
 
+    sb_push(&gen.sb, "    push rbx\n");
+    sb_push(&gen.sb, "    push r12\n");
+    sb_push(&gen.sb, "    push r13\n");
+    sb_push(&gen.sb, "    push r14\n");
+    sb_push(&gen.sb, "    push r15\n");
     gen_expr_linux_x86_64(&gen, funcs.items[i]->body,
                           STR("rax", 3), true);
+    sb_push(&gen.sb, "    pop r15\n");
+    sb_push(&gen.sb, "    pop r14\n");
+    sb_push(&gen.sb, "    pop r13\n");
+    sb_push(&gen.sb, "    pop r12\n");
+    sb_push(&gen.sb, "    pop rbx\n");
 
     if (funcs.items[i]->scope_size != 0)
       sb_push(&gen.sb, "    leave\n");
