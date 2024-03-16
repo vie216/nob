@@ -50,6 +50,11 @@ Str read_file(char *path) {
   Str content;
 
   FILE *file = fopen(path, "r");
+  if (!file) {
+    ERROR("Could not open input file\n");
+    exit(1);
+  }
+
   fseek(file, 0, SEEK_END);
   content.len = ftell(file);
   content.ptr = malloc(content.len);
