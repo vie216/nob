@@ -6,18 +6,20 @@
 #include "arena.h"
 
 typedef enum {
-  TokenKindNone    = 1 << 0,
-  TokenKindIntLit  = 1 << 1,
-  TokenKindStrLit  = 1 << 2,
-  TokenKindOp      = 1 << 3,
-  TokenKindSemi    = 1 << 4,
-  TokenKindIdent   = 1 << 5,
-  TokenKindKeyword = 1 << 6,
-  TokenKindOParen  = 1 << 7,
-  TokenKindCParen  = 1 << 8,
-  TokenKindComma   = 1 << 9,
-  TokenKindColon   = 1 << 10,
-  TokenKindCount   = 11,
+  TokenKindNone   = 1 << 0,
+  TokenKindIntLit = 1 << 1,
+  TokenKindStrLit = 1 << 2,
+  TokenKindOp     = 1 << 3,
+  TokenKindSemi   = 1 << 4,
+  TokenKindIdent  = 1 << 5,
+  TokenKindOParen = 1 << 6,
+  TokenKindCParen = 1 << 7,
+  TokenKindComma  = 1 << 8,
+  TokenKindColon  = 1 << 9,
+  TokenKindLet    = 1 << 10,
+  TokenKindIf     = 1 << 11,
+  TokenKindElse   = 1 << 12,
+  TokenKindCount  = 13,
 } TokenKind;
 
 typedef struct {
@@ -71,19 +73,6 @@ static i32 op_precedence(Str op) {
   return 3;
 }
 
-static bool is_keyword(Str str) {
-  static Str keywords[] = {
-    STR("let", 3),
-    STR("if", 2),
-    STR("else", 4),
-  };
-
-  for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i)
-    if (str_eq(keywords[i], str))
-      return true;
-  return false;
-}
-
 static bool parser_eof(Parser *parser) {
   return parser->current >= parser->source.ptr + parser->source.len;
 }
@@ -123,6 +112,7 @@ static Token parser_next_token(Parser *parser) {
   TokenKind kind = TokenKindNone;
   char *start = parser->current++;
 
+  _Static_assert (TokenKindCount == 13, "All token kinds should be handled here.");
   if (isdigit(*start)) {
     kind = TokenKindIntLit;
     while (!parser_eof(parser) && isdigit(*parser->current))
@@ -137,8 +127,25 @@ static Token parser_next_token(Parser *parser) {
     kind = TokenKindIdent;
     while (!parser_eof(parser) && IS_IDENT(*parser->current))
       parser->current++;
-    bool keyword = is_keyword(STR(start, parser->current - start));
-    kind = keyword ? TokenKindKeyword : TokenKindIdent;
+
+    struct Keyword {
+      Str keyword;
+      i32 token_kind;
+    };
+
+    _Static_assert (TokenKindCount == 13, "Maybe new keyword was added? Then update this place.");
+    static struct Keyword keywords[] = {
+      { STR("let", 3), TokenKindLet },
+      { STR("if", 2), TokenKindIf },
+      { STR("else", 4), TokenKindElse },
+    };
+
+    for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i) {
+      if (str_eq(keywords[i].keyword, STR(start, parser->current - start))) {
+        kind = keywords[i].token_kind;
+        break;
+      }
+    }
   } else if (*start == '(') {
     kind = TokenKindOParen;
   } else if (*start == ')') {
@@ -190,15 +197,16 @@ static Token parser_peek_token(Parser *parser) {
   return token;
 }
 
-static char *token_kind_names[TokenKindCount] = {
-  "end of file", "integer", "string", "operator", "semicolon",
-  "identifier", "keyword", "left paren", "right paren", "comma",
-  "colon",
-};
-
 static void print_token_kind(TokenKind token_kind) {
   char *prev_str = NULL;
   bool printed = false;
+
+  _Static_assert (TokenKindCount == 13, "All token kinds should be handled here.");
+  static char *token_kind_names[TokenKindCount] = {
+    "end of file", "integer", "string", "operator", "semicolon",
+    "identifier", "left paren", "right paren", "comma", "colon",
+    "let", "if", "else",
+  };
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
     if (token_kind & (1 << i)) {
@@ -303,10 +311,14 @@ static Expr parser_parse_if(Parser *parser) {
   parser_expect_token(parser, TokenKindSemi);
 
   Token token = parser_peek_token(parser);
-  if (token.kind == TokenKindKeyword && str_eq(token.str, STR("else", 4))) {
+  if (token.kind == TokenKindElse) {
     parser_next_token(parser);
-    parser_expect_token(parser, TokenKindColon);
-    eef.as.eef->elze = parser_parse_expr(parser, 0);
+    token = parser_expect_token(parser, TokenKindColon | TokenKindIf);
+    if (token.kind == TokenKindIf) {
+      eef.as.eef->elze = parser_parse_if(parser);
+    } else {
+      eef.as.eef->elze = parser_parse_expr(parser, 0);
+    }
     eef.as.eef->has_else = true;
   }
 
@@ -318,7 +330,7 @@ static Expr parser_parse_lhs(Parser *parser) {
   Token token = parser_expect_token(parser,
                               TokenKindIntLit | TokenKindIdent |
                               TokenKindOParen | TokenKindStrLit |
-                              TokenKindKeyword);
+                              TokenKindLet | TokenKindIf);
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
@@ -336,12 +348,10 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.as.ident->ident = token.str;
   } else if (token.kind == TokenKindOParen) {
     lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
-  } else if (token.kind == TokenKindKeyword) {
-    if (str_eq(token.str, STR("let", 3))) {
-      lhs = parser_parse_let(parser);
-    } else if (str_eq(token.str, STR("if", 2))) {
-      lhs = parser_parse_if(parser);
-    }
+  } else if (token.kind == TokenKindLet) {
+    lhs = parser_parse_let(parser);
+  } else if (token.kind == TokenKindIf) {
+    lhs = parser_parse_if(parser);
   }
 
   if (parser_peek_token(parser).kind == TokenKindOParen) {
