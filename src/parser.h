@@ -90,7 +90,6 @@ struct ExprFunc {
   Args args;
   Expr body;
   // Metadata
-  Str loc;
   i32 scope_size;
 };
 

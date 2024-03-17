@@ -255,8 +255,6 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Str target, bool s
 }
 
 static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Str target, bool strict) {
-  func->loc = func->name;
-
   if (!strict)
     return func->name;
 
