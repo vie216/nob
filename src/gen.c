@@ -8,11 +8,11 @@
 typedef struct {
   Str *items;
   i32 len, cap;
-} DBs;
+} Strings;
 
 typedef struct {
   StringBuilder sb;
-  DBs           dbs;
+  Strings       strings;
   i32           regs_used;
   i32           scope_size;
   i32           stack_pointer;
@@ -99,7 +99,7 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Str target, bool s
 
     return target;
   } else if (lit->kind == LitKindStr) {
-    DA_APPEND(gen->dbs, lit->lit);
+    DA_APPEND(gen->strings, lit->lit);
 
     if (!strict) {
       char *name = malloc(lit->lit.len + 3);
@@ -330,13 +330,13 @@ char *gen_linux_x86_64(Functions funcs) {
     gen.scope_size = 0;
   }
 
-  if (gen.dbs.len > 0)
+  if (gen.strings.len > 0)
     sb_push(&gen.sb, "segment readable\n");
-  for (i32 i = 0; i < gen.dbs.len; ++i) {
+  for (i32 i = 0; i < gen.strings.len; ++i) {
     sb_push(&gen.sb, "db_");
     sb_push_i32(&gen.sb, i);
     sb_push(&gen.sb, ": db ");
-    sb_push_str(&gen.sb, gen.dbs.items[i]);
+    sb_push_str(&gen.sb, gen.strings.items[i]);
     sb_push(&gen.sb, ", 0\n");
   }
 
