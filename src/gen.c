@@ -203,16 +203,16 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
   }
 
   case ExprKindVar: {
-    gen->scope_size += expr.as.var->size;
-
     StringBuilder sb = {0};
-    sb_push(&sb, "qword [rbp - ");
+    sb_push(&sb, "qword [rsp + ");
     sb_push_i32(&sb, gen->scope_size);
     sb_push(&sb, "]");
     expr.as.var->loc = (Str) {
       .ptr = sb.buffer,
       .len = sb.len,
     };
+
+    gen->scope_size += expr.as.var->size;
 
     Str value = gen_expr_linux_x86_64(gen, expr.as.var->value, target, strict);
 
@@ -311,7 +311,6 @@ char *gen_linux_x86_64(Functions funcs) {
   sb_push(&gen.sb, "entry _start\n");
   sb_push(&gen.sb, "segment readable executable\n");
   sb_push(&gen.sb, "_start:\n");
-  sb_push(&gen.sb, "    mov rbp, rsp\n");
   sb_push(&gen.sb, "    call main\n");
   sb_push(&gen.sb, "    mov rdi, rax\n");
   sb_push(&gen.sb, "    mov rax, 60\n");
@@ -320,29 +319,34 @@ char *gen_linux_x86_64(Functions funcs) {
   for (i32 i = 0; i < funcs.len; ++i) {
     sb_push_str(&gen.sb, funcs.items[i]->name);
     sb_push(&gen.sb, ":\n");
-    if (funcs.items[i]->scope_size != 0) {
-      sb_push(&gen.sb, "    push rbp\n");
-      sb_push(&gen.sb, "    mov rbp, rsp\n");
-      sb_push(&gen.sb, "    sub rsp, ");
-      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
-      sb_push(&gen.sb, "\n");
-    }
 
     sb_push(&gen.sb, "    push rbx\n");
     sb_push(&gen.sb, "    push r12\n");
     sb_push(&gen.sb, "    push r13\n");
     sb_push(&gen.sb, "    push r14\n");
     sb_push(&gen.sb, "    push r15\n");
+
+    if (funcs.items[i]->scope_size != 0) {
+      sb_push(&gen.sb, "    sub rsp, ");
+      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
+      sb_push(&gen.sb, "\n");
+    }
+
     gen_expr_linux_x86_64(&gen, funcs.items[i]->body,
                           STR("rax", 3), true);
+
+    if (funcs.items[i]->scope_size != 0) {
+      sb_push(&gen.sb, "    add rsp, ");
+      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
+      sb_push(&gen.sb, "\n");
+    }
+
     sb_push(&gen.sb, "    pop r15\n");
     sb_push(&gen.sb, "    pop r14\n");
     sb_push(&gen.sb, "    pop r13\n");
     sb_push(&gen.sb, "    pop r12\n");
     sb_push(&gen.sb, "    pop rbx\n");
 
-    if (funcs.items[i]->scope_size != 0)
-      sb_push(&gen.sb, "    leave\n");
     sb_push(&gen.sb, "    ret\n");
 
     gen.scope_size = 0;
