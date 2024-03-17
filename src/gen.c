@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "gen.h"
 #include "log.h"
@@ -55,11 +56,7 @@ static void mem_free_args(Memory *mem) {
 }
 
 typedef struct {
-  Str name, data;
-} DB;
-
-typedef struct {
-  DB *items;
+  Str *items;
   i32 len, cap;
 } DBs;
 
@@ -141,25 +138,24 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Str target, bool s
 
     return target;
   } else if (lit->kind == LitKindStr) {
-    StringBuilder sb;
-    sb_push(&sb, "db_");
-    sb_push_i32(&sb, gen->dbs.len);
-    DB db = {
-      .name = (Str) {
-        .ptr = sb.buffer,
-        .len = sb.len,
-      },
-      .data = lit->lit,
-    };
-    DA_APPEND(gen->dbs, db);
+    DA_APPEND(gen->dbs, lit->lit);
 
-    if (!strict)
-      return db.name;
+    if (!strict) {
+      char *name = malloc(lit->lit.len + 3);
+      name[0] = 'd';
+      name[1] = 'b';
+      name[2] = '_';
+      memmove(name + 3, lit->lit.ptr, lit->lit.len);
+      return (Str) {
+        .ptr = name,
+        .len = lit->lit.len + 3,
+      };
+    }
 
     sb_push(&gen->sb, "    mov ");
     sb_push_str(&gen->sb, target);
-    sb_push(&gen->sb, ", ");
-    sb_push_str(&gen->sb, db.name);
+    sb_push(&gen->sb, ", db_");
+    sb_push_str(&gen->sb, lit->lit);
     sb_push(&gen->sb, "\n");
 
     return target;
@@ -369,9 +365,10 @@ char *gen_linux_x86_64(Functions funcs) {
   if (gen.dbs.len > 0)
     sb_push(&gen.sb, "segment readable\n");
   for (i32 i = 0; i < gen.dbs.len; ++i) {
-    sb_push_str(&gen.sb, gen.dbs.items[i].name);
+    sb_push(&gen.sb, "db_");
+    sb_push_i32(&gen.sb, i);
     sb_push(&gen.sb, ": db ");
-    sb_push_str(&gen.sb, gen.dbs.items[i].data);
+    sb_push_str(&gen.sb, gen.dbs.items[i]);
     sb_push(&gen.sb, ", 0\n");
   }
 
