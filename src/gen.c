@@ -5,56 +5,6 @@
 #include "gen.h"
 #include "log.h"
 
-static Str reg_names[] = { STR("rbx", 3), STR("r12", 3), STR("r13", 3),
-                           STR("r14", 3), STR("r15", 3) };
-static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
-                               STR("rcx", 3), STR("r8", 2),  STR("r9", 2) };
-
-typedef struct {
-  bool regs[ARRAY_LEN(reg_names)];
-  bool arg_regs[ARRAY_LEN(arg_reg_names)];
-} Memory;
-
-static Str mem_reserve(Memory *mem) {
-  for (i32 i = 0; i < (i32) ARRAY_LEN(reg_names); ++i) {
-    if (!mem->regs[i]) {
-      mem->regs[i] = true;
-      return reg_names[i];
-    }
-  }
-
-  ERROR("Exceeded registers count\n");
-  INFO("TODO: use stack when this happens\n");
-  exit(1);
-}
-
-static void mem_free(Memory *mem, Str name) {
-  for (i32 i = 0; i < (i32) ARRAY_LEN(reg_names); ++i) {
-    if (str_eq(reg_names[i], name)) {
-      mem->regs[i] = false;
-      return;
-    }
-  }
-}
-
-static Str mem_reserve_arg(Memory *mem) {
-  for (i32 i = 0; i < (i32) ARRAY_LEN(arg_reg_names); ++i) {
-    if (!mem->arg_regs[i]) {
-      mem->arg_regs[i] = true;
-      return arg_reg_names[i];
-    }
-  }
-
-  ERROR("Exceeded arg registers count\n");
-  INFO("TODO: use stack when this happens\n");
-  exit(1);
-}
-
-static void mem_free_args(Memory *mem) {
-  for (i32 i = 0; i < (i32) ARRAY_LEN(arg_reg_names); ++i)
-    mem->arg_regs[i] = false;
-}
-
 typedef struct {
   Str *items;
   i32 len, cap;
@@ -62,12 +12,24 @@ typedef struct {
 
 typedef struct {
   StringBuilder sb;
-  Memory        mem;
   DBs           dbs;
+  i32           regs_used;
   i32           scope_size;
   i32           stack_pointer;
   i32           ifs_count;
 } Generator;
+
+static Str gen_reserve_reg(Generator *gen) {
+  static Str reg_names[] = { STR("rbx", 3), STR("r12", 3), STR("r13", 3),
+                             STR("r14", 3), STR("r15", 3) };
+
+  if (gen->regs_used >= (i32) ARRAY_LEN(reg_names)) {
+    ERROR("Exceeded amount of available registers");
+    exit(1);
+  }
+
+  return reg_names[gen->regs_used++];
+}
 
 static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool strict);
 
@@ -81,15 +43,14 @@ static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Str target
 
     Str lhs_loc = target;
     if (flag)
-      lhs_loc = mem_reserve(&gen->mem);
+      lhs_loc = gen_reserve_reg(gen);
     Str lhs = gen_expr_linux_x86_64(gen, bin_op->lhs, lhs_loc, true);
 
-    Str rhs_loc = mem_reserve(&gen->mem);
+    Str rhs_loc = gen_reserve_reg(gen);
     Str rhs = gen_expr_linux_x86_64(gen, bin_op->rhs,
                                     rhs_loc, false);
 
-    mem_free(&gen->mem, lhs_loc);
-    mem_free(&gen->mem, rhs_loc);
+    gen->regs_used -= 1 + flag;
 
     if (str_eq(bin_op->op, STR("+", 1)))
       sb_push(&gen->sb, "    add ");
@@ -166,12 +127,13 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Str target, bool s
 }
 
 static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Str target, bool strict) {
-  Str mem = mem_reserve(&gen->mem);
+  Str mem = gen_reserve_reg(gen);
 
   for (i32 i = 0; i + 1 < block->len; ++i)
     gen_expr_linux_x86_64(gen, block->items[i],
                           mem, false);
-                          mem_free(&gen->mem, mem);
+
+  gen->regs_used--;
 
   if (block->len > 0) {
     Expr last = block->items[block->len - 1];
@@ -202,11 +164,18 @@ static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Str target, 
 }
 
 static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Str target, bool strict) {
-  for (i32 i = 0; i < call->args->len; ++i) {
-    Expr arg_expr = call->args->items[i];
-    Str arg_loc = mem_reserve_arg(&gen->mem);
-    gen_expr_linux_x86_64(gen, arg_expr, arg_loc, true);
+  static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
+                                 STR("rcx", 3), STR("r8", 2), STR("r9", 2) };
+
+  if (call->args->len > (i32) ARRAY_LEN(arg_reg_names)) {
+    ERROR("Exceeded amount of registers for function arguments");
+    INFO("TODO: use stack when this happens");
+    exit(1);
   }
+
+  for (i32 i = 0; i < call->args->len; ++i)
+    gen_expr_linux_x86_64(gen, call->args->items[i],
+                          arg_reg_names[i], true);
 
   Str callee = gen_expr_linux_x86_64(gen, call->func,
                                      STR("rax", 3), false);
@@ -221,7 +190,6 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Str target, boo
     sb_push(&gen->sb, ", rax\n");
   }
 
-  mem_free_args(&gen->mem);
   return strict ? target : STR("rax", 3);
 }
 
