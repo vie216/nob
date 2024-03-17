@@ -68,6 +68,7 @@ typedef struct {
   Memory        mem;
   DBs           dbs;
   i32           scope_size;
+  i32           stack_pointer;
   i32           ifs_count;
 } Generator;
 
@@ -203,16 +204,16 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
   }
 
   case ExprKindVar: {
+    gen->stack_pointer += expr.as.var->size;
+
     StringBuilder sb = {0};
     sb_push(&sb, "qword [rsp + ");
-    sb_push_i32(&sb, gen->scope_size);
+    sb_push_i32(&sb, gen->scope_size - gen->stack_pointer);
     sb_push(&sb, "]");
     expr.as.var->loc = (Str) {
       .ptr = sb.buffer,
       .len = sb.len,
     };
-
-    gen->scope_size += expr.as.var->size;
 
     Str value = gen_expr_linux_x86_64(gen, expr.as.var->value, target, strict);
 
@@ -268,12 +269,13 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
   case ExprKindIf: {
     Str cond = gen_expr_linux_x86_64(gen, expr.as.eef->cond,
                                      target, true);
+    i32 if_id = gen->ifs_count++;
 
     sb_push(&gen->sb, "    cmp ");
     sb_push_str(&gen->sb, cond);
     sb_push(&gen->sb, ", 0\n");
     sb_push(&gen->sb, "    je else_");
-    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push_i32(&gen->sb, if_id);
     sb_push(&gen->sb, "\n");
 
     gen_expr_linux_x86_64(gen, expr.as.eef->body,
@@ -281,21 +283,20 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
 
     if (expr.as.eef->has_else) {
       sb_push(&gen->sb, "    jmp next_");
-      sb_push_i32(&gen->sb, gen->ifs_count);
+      sb_push_i32(&gen->sb, if_id);
       sb_push(&gen->sb, "\n");
     }
     sb_push(&gen->sb, "  else_");
-    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push_i32(&gen->sb, if_id);
     sb_push(&gen->sb, ":\n");
 
     if (expr.as.eef->has_else)
       gen_expr_linux_x86_64(gen, expr.as.eef->elze, target, true);
 
     sb_push(&gen->sb, "  next_");
-    sb_push_i32(&gen->sb, gen->ifs_count);
+    sb_push_i32(&gen->sb, if_id);
     sb_push(&gen->sb, ":\n");
 
-    gen->ifs_count++;
     return target;
   }
   }
@@ -332,6 +333,7 @@ char *gen_linux_x86_64(Functions funcs) {
       sb_push(&gen.sb, "\n");
     }
 
+    gen.scope_size = funcs.items[i]->scope_size;
     gen_expr_linux_x86_64(&gen, funcs.items[i]->body,
                           STR("rax", 3), true);
 
