@@ -103,9 +103,9 @@ int main(int argc, char **argv) {
   INFO("Parsing\n");
   Expr program = parse_program(source_code, input_path);
   INFO("Type checking\n");
-  Functions funcs = add_metadata(&program);
+  Metadata meta = add_metadata(program);
   INFO("Compiling\n");
-  char *_asm = gen_linux_x86_64(funcs);
+  char *_asm = gen_linux_x86_64(meta);
   INFO("Assembling\n");
   char *asm_path = write_asm(output_path, _asm);
   assemble(asm_path);

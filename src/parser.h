@@ -23,6 +23,8 @@ typedef struct ExprVar   ExprVar;
 typedef struct ExprFunc  ExprFunc;
 typedef struct ExprIf    ExprIf;
 
+typedef struct Def Def;
+
 typedef union {
   ExprBinOp *bin_op;
   ExprLit   *lit;
@@ -63,8 +65,7 @@ struct ExprBlock {
 struct ExprIdent {
   Str ident;
   // Metadata
-  Str  target_name;
-  Expr target_expr;
+  Def *def;
 };
 
 struct ExprCall {
@@ -76,8 +77,7 @@ struct ExprVar {
   Str  name;
   Expr value;
   // Metadata
-  Str loc;
-  i32 size;
+  Def *def;
 };
 
 typedef struct {
@@ -89,8 +89,6 @@ struct ExprFunc {
   Str  name;
   Args args;
   Expr body;
-  // Metadata
-  i32 scope_size;
 };
 
 struct ExprIf {

@@ -144,20 +144,13 @@ static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Str target, 
 }
 
 static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Str target, bool strict) {
-  Str loc = STR("", 0);
-  Expr target_expr = ident->target_expr;
-  if (target_expr.kind == ExprKindVar)
-    loc = target_expr.as.var->loc;
-  else if (target_expr.kind == ExprKindFunc)
-    loc = target_expr.as.func->name;
-
   if (!strict)
-    return loc;
+    return ident->def->loc;
 
   sb_push(&gen->sb, "    mov ");
   sb_push_str(&gen->sb, target);
   sb_push(&gen->sb, ", ");
-  sb_push_str(&gen->sb, loc);
+  sb_push_str(&gen->sb, ident->def->loc);
   sb_push(&gen->sb, "\n");
 
   return target;
@@ -194,22 +187,22 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Str target, boo
 }
 
 static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Str target, bool strict) {
-  gen->stack_pointer += var->size;
+  gen->stack_pointer += var->def->size;
 
   StringBuilder sb = {0};
   sb_push(&sb, "qword [rsp + ");
   sb_push_i32(&sb, gen->scope_size - gen->stack_pointer);
   sb_push(&sb, "]");
-  var->loc = (Str) {
+  var->def->loc = (Str) {
     .ptr = sb.buffer,
     .len = sb.len,
   };
 
   Str value = gen_expr_linux_x86_64(gen, var->value, target, strict);
 
-  if (!str_eq(value, var->loc)) {
+  if (!str_eq(value, var->def->loc)) {
     sb_push(&gen->sb, "    mov ");
-    sb_push_str(&gen->sb, var->loc);
+    sb_push_str(&gen->sb, var->def->loc);
     sb_push(&gen->sb, ", ");
     sb_push_str(&gen->sb, value);
     sb_push(&gen->sb, "\n");
@@ -281,7 +274,7 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool str
   exit(1);
 }
 
-char *gen_linux_x86_64(Functions funcs) {
+char *gen_linux_x86_64(Metadata meta) {
   Generator gen = {0};
 
   sb_push(&gen.sb, "format ELF64 executable\n");
@@ -293,8 +286,10 @@ char *gen_linux_x86_64(Functions funcs) {
   sb_push(&gen.sb, "    mov rax, 60\n");
   sb_push(&gen.sb, "    syscall\n");
 
-  for (i32 i = 0; i < funcs.len; ++i) {
-    sb_push_str(&gen.sb, funcs.items[i]->name);
+  for (i32 i = 0; i < meta.funcs.len; ++i) {
+    Func func = meta.funcs.items[i];
+
+    sb_push_str(&gen.sb, func.expr->name);
     sb_push(&gen.sb, ":\n");
 
     sb_push(&gen.sb, "    push rbx\n");
@@ -303,19 +298,19 @@ char *gen_linux_x86_64(Functions funcs) {
     sb_push(&gen.sb, "    push r14\n");
     sb_push(&gen.sb, "    push r15\n");
 
-    if (funcs.items[i]->scope_size != 0) {
+    if (func.scope_size != 0) {
       sb_push(&gen.sb, "    sub rsp, ");
-      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
+      sb_push_i32(&gen.sb, func.scope_size);
       sb_push(&gen.sb, "\n");
     }
 
-    gen.scope_size = funcs.items[i]->scope_size;
-    gen_expr_linux_x86_64(&gen, funcs.items[i]->body,
+    gen.scope_size = func.scope_size;
+    gen_expr_linux_x86_64(&gen, func.expr->body,
                           STR("rax", 3), true);
 
-    if (funcs.items[i]->scope_size != 0) {
+    if (func.scope_size != 0) {
       sb_push(&gen.sb, "    add rsp, ");
-      sb_push_i32(&gen.sb, funcs.items[i]->scope_size);
+      sb_push_i32(&gen.sb, func.scope_size);
       sb_push(&gen.sb, "\n");
     }
 
