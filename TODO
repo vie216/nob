@@ -3,3 +3,5 @@ Division/modulo
 Inline assembly
 Type system
 Do not generate so much assembly for every function
+Convenient intrinsic system
+Treat operators as function calls
