@@ -372,7 +372,7 @@ static Expr parser_parse_lhs(Parser *parser) {
 
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
   Expr lhs = parser_parse_lhs(parser);
-  ExprBinOp *expr = NULL;
+  ExprCall *expr = NULL;
 
   for (;;) {
     Token token = parser_peek_token(parser);
@@ -381,12 +381,18 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
       break;
     parser_next_token(parser);
 
-    expr = aalloc(sizeof(ExprBinOp));
-    expr->op = token.str;
-    expr->lhs = lhs;
-    expr->rhs = parser_parse_expr(parser, precedence);
-    lhs.kind = ExprKindBinOp;
-    lhs.as.bin_op = expr;
+    Expr rhs = parser_parse_expr(parser, precedence);
+
+    expr = aalloc(sizeof(ExprCall));
+    expr->func.kind = ExprKindIdent;
+    expr->func.as.ident = aalloc(sizeof(ExprIdent));
+    expr->func.as.ident->ident = token.str;
+    expr->args = aalloc(sizeof(ExprBlock));
+    DA_APPEND(*expr->args, lhs);
+    DA_APPEND(*expr->args, rhs);
+
+    lhs.kind = ExprKindCall;
+    lhs.as.call = expr;
   }
 
   return lhs;
