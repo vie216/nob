@@ -47,7 +47,6 @@ typedef struct {
                             || (token).kind == TokenKindStrLit  \
                             || (token).kind == TokenKindIdent   \
                             || (token).kind == TokenKindCParen)
-#define IS_IDENT(ch) (isalpha(ch) || ch == '_')
 
 static i32 op_precedence(Str op) {
   struct OpPrecedence {
@@ -123,9 +122,11 @@ static Token parser_next_token(Parser *parser) {
       parser->current++;
   } else if (*start == ';') {
     kind = TokenKindSemi;
-  } else if (IS_IDENT(*start)) {
+  } else if (isalpha(*start) || *start == '_') {
     kind = TokenKindIdent;
-    while (!parser_eof(parser) && IS_IDENT(*parser->current))
+    while (!parser_eof(parser) &&
+           (isalnum(*parser->current) ||
+            *parser->current == '_'))
       parser->current++;
 
     struct Keyword {
@@ -280,6 +281,7 @@ static Expr parser_parse_let(Parser *parser) {
     fputs(", expected `=` in `let` expression\n", stderr);
     exit(1);
   }
+
   Expr value = parser_parse_expr(parser, 0);
 
   if (func) {
@@ -328,9 +330,9 @@ static Expr parser_parse_if(Parser *parser) {
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_expect_token(parser,
-                              TokenKindIntLit | TokenKindIdent |
-                              TokenKindOParen | TokenKindStrLit |
-                              TokenKindLet | TokenKindIf);
+                                    TokenKindIntLit | TokenKindIdent |
+                                    TokenKindOParen | TokenKindStrLit |
+                                    TokenKindLet | TokenKindIf);
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
@@ -357,7 +359,7 @@ static Expr parser_parse_lhs(Parser *parser) {
   if (parser_peek_token(parser).kind == TokenKindOParen) {
     parser_next_token(parser);
     Expr func = lhs;
-    Expr args = parser_parse_block(parser, TokenKindComma , TokenKindCParen);
+    Expr args = parser_parse_block(parser, TokenKindComma, TokenKindCParen);
 
     lhs.kind = ExprKindCall;
     lhs.as.call = aalloc(sizeof(ExprCall));

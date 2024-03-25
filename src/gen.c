@@ -19,6 +19,13 @@ typedef struct {
   i32           ifs_count;
 } Generator;
 
+typedef struct {
+  Str  str;
+  bool strict;
+} Target;
+
+#define TARGET(loc, strict) ((Target) { loc, strict })
+
 static Str gen_reserve_reg(Generator *gen) {
   static Str reg_names[] = { STR("rbx", 3), STR("r12", 3), STR("r13", 3),
                              STR("r14", 3), STR("r15", 3) };
@@ -31,24 +38,23 @@ static Str gen_reserve_reg(Generator *gen) {
   return reg_names[gen->regs_used++];
 }
 
-static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool strict);
+static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target);
 
-static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Str target) {
+static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Target target) {
   if (str_eq(bin_op->op, STR("+", 1))
       || str_eq(bin_op->op, STR("-", 1))
       || str_eq(bin_op->op, STR("*", 1))) {
     /* Yes, I didn't come up with a better name */
-    bool flag = str_eq(target, STR("rax", 3)) &&
+    bool flag = str_eq(target.str, STR("rax", 3)) &&
                 bin_op->rhs.kind == ExprKindCall;
 
-    Str lhs_loc = target;
+    Str lhs_loc = target.str;
     if (flag)
       lhs_loc = gen_reserve_reg(gen);
-    Str lhs = gen_expr_linux_x86_64(gen, bin_op->lhs, lhs_loc, true);
+    Str lhs = gen_expr_linux_x86_64(gen, bin_op->lhs, TARGET(lhs_loc, true));
 
     Str rhs_loc = gen_reserve_reg(gen);
-    Str rhs = gen_expr_linux_x86_64(gen, bin_op->rhs,
-                                    rhs_loc, false);
+    Str rhs = gen_expr_linux_x86_64(gen, bin_op->rhs, TARGET(rhs_loc, false));
 
     gen->regs_used -= 1 + flag;
 
@@ -78,30 +84,30 @@ static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Str target
   exit(1);
 }
 
-static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Str target, bool strict) {
+static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
   if (lit->kind == LitKindInt) {
-    if (!strict)
+    if (!target.strict)
       return lit->lit;
 
     if (str_eq(lit->lit, STR("0", 1))) {
       sb_push(&gen->sb, "    xor ");
-      sb_push_str(&gen->sb, target);
+      sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
-      sb_push_str(&gen->sb, target);
+      sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, "\n");
     } else {
       sb_push(&gen->sb, "    mov ");
-      sb_push_str(&gen->sb, target);
+      sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, lit->lit);
       sb_push(&gen->sb, "\n");
     }
 
-    return target;
+    return target.str;
   } else if (lit->kind == LitKindStr) {
     DA_APPEND(gen->strings, lit->lit);
 
-    if (!strict) {
+    if (!target.strict) {
       char *name = malloc(lit->lit.len + 3);
       name[0] = 'd';
       name[1] = 'b';
@@ -114,79 +120,76 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Str target, bool s
     }
 
     sb_push(&gen->sb, "    mov ");
-    sb_push_str(&gen->sb, target);
+    sb_push_str(&gen->sb, target.str);
     sb_push(&gen->sb, ", db_");
     sb_push_str(&gen->sb, lit->lit);
     sb_push(&gen->sb, "\n");
 
-    return target;
+    return target.str;
   }
 
   ERROR("Unreachable\n");
   exit(1);
 }
 
-static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Str target, bool strict) {
+static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Target target) {
   Str mem = gen_reserve_reg(gen);
 
   for (i32 i = 0; i + 1 < block->len; ++i)
-    gen_expr_linux_x86_64(gen, block->items[i],
-                          mem, false);
+    gen_expr_linux_x86_64(gen, block->items[i], TARGET(mem, false));
 
   gen->regs_used--;
 
   if (block->len > 0) {
     Expr last = block->items[block->len - 1];
-    return gen_expr_linux_x86_64(gen, last, target, strict);
+    return gen_expr_linux_x86_64(gen, last, target);
   }
 
   return STR("rax", 3);
 }
 
-static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Str target, bool strict) {
-  if (!strict)
+static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Target target) {
+  if (!target.strict)
     return ident->def->loc;
 
   sb_push(&gen->sb, "    mov ");
-  sb_push_str(&gen->sb, target);
+  sb_push_str(&gen->sb, target.str);
   sb_push(&gen->sb, ", ");
   sb_push_str(&gen->sb, ident->def->loc);
   sb_push(&gen->sb, "\n");
 
-  return target;
+  return target.str;
 }
 
-static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Str target, bool strict) {
+static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) {
   static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
                                  STR("rcx", 3), STR("r8", 2), STR("r9", 2) };
 
   if (call->args->len > (i32) ARRAY_LEN(arg_reg_names)) {
-    ERROR("Exceeded amount of registers for function arguments");
-    INFO("TODO: use stack when this happens");
+    ERROR("Exceeded amount of registers for function arguments\n");
+    INFO("TODO: use stack when this happens\n");
     exit(1);
   }
 
   for (i32 i = 0; i < call->args->len; ++i)
-    gen_expr_linux_x86_64(gen, call->args->items[i],
-                          arg_reg_names[i], true);
+    gen_expr_linux_x86_64(gen, call->args->items[i], TARGET(arg_reg_names[i], true));
 
-  Str callee = gen_expr_linux_x86_64(gen, call->func,
-                                     STR("rax", 3), false);
+  Str callee = gen_expr_linux_x86_64(gen, call->func, TARGET(STR("rax", 3), false));
 
   sb_push(&gen->sb, "    call ");
   sb_push_str(&gen->sb, callee);
   sb_push(&gen->sb, "\n");
 
-  if (strict && !str_eq(target, STR("rax", 3))) {
+  if (target.strict && !str_eq(target.str, STR("rax", 3))) {
     sb_push(&gen->sb, "    mov ");
-    sb_push_str(&gen->sb, target);
+    sb_push_str(&gen->sb, target.str);
     sb_push(&gen->sb, ", rax\n");
   }
 
-  return strict ? target : STR("rax", 3);
+  return target.strict ? target.str : STR("rax", 3);
 }
 
-static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Str target, bool strict) {
+static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
   gen->stack_pointer += var->def->size;
 
   StringBuilder sb = {0};
@@ -198,7 +201,7 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Str target, bool s
     .len = sb.len,
   };
 
-  Str value = gen_expr_linux_x86_64(gen, var->value, target, strict);
+  Str value = gen_expr_linux_x86_64(gen, var->value, target);
 
   if (!str_eq(value, var->def->loc)) {
     sb_push(&gen->sb, "    mov ");
@@ -211,22 +214,21 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Str target, bool s
   return value;
 }
 
-static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Str target, bool strict) {
-  if (!strict)
-    return func->name;
+static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Target target) {
+  if (!target.strict)
+    return func->def->loc;
 
   sb_push(&gen->sb, "    mov ");
-  sb_push_str(&gen->sb, target);
+  sb_push_str(&gen->sb, target.str);
   sb_push(&gen->sb, ", ");
-  sb_push_str(&gen->sb, func->name);
+  sb_push_str(&gen->sb, func->def->loc);
   sb_push(&gen->sb, "\n");
 
-  return target;
+  return target.str;
 }
 
-static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Str target) {
-  Str cond = gen_expr_linux_x86_64(gen, eef->cond,
-                                   target, true);
+static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
+  Str cond = gen_expr_linux_x86_64(gen, eef->cond, TARGET(target.str, true));
   i32 if_id = gen->ifs_count++;
 
   sb_push(&gen->sb, "    cmp ");
@@ -236,8 +238,7 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Str target) {
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, "\n");
 
-  gen_expr_linux_x86_64(gen, eef->body,
-                        target, true);
+  gen_expr_linux_x86_64(gen, eef->body, TARGET(target.str, true));
 
   if (eef->has_else) {
     sb_push(&gen->sb, "    jmp next_");
@@ -249,24 +250,24 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Str target) {
   sb_push(&gen->sb, ":\n");
 
   if (eef->has_else)
-    gen_expr_linux_x86_64(gen, eef->elze, target, true);
+    gen_expr_linux_x86_64(gen, eef->elze, TARGET(target.str, true));
 
   sb_push(&gen->sb, "  next_");
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, ":\n");
 
-  return target;
+  return target.str;
 }
 
-static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Str target, bool strict) {
+static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
   switch (expr.kind) {
   case ExprKindBinOp: return gen_bin_op_linux_x86_64(gen, expr.as.bin_op, target);
-  case ExprKindLit:   return gen_lit_linux_x86_64(gen, expr.as.lit, target, strict);
-  case ExprKindBlock: return gen_block_linux_x86_64(gen, expr.as.block, target, strict);
-  case ExprKindIdent: return gen_ident_linux_x86_64(gen, expr.as.ident, target, strict);
-  case ExprKindCall:  return gen_call_linux_x86_64(gen, expr.as.call, target, strict);
-  case ExprKindVar:   return gen_var_linux_x86_64(gen, expr.as.var, target, strict);
-  case ExprKindFunc:  return gen_func_linux_x86_64(gen, expr.as.func, target, strict);
+  case ExprKindLit:   return gen_lit_linux_x86_64(gen, expr.as.lit, target);
+  case ExprKindBlock: return gen_block_linux_x86_64(gen, expr.as.block, target);
+  case ExprKindIdent: return gen_ident_linux_x86_64(gen, expr.as.ident, target);
+  case ExprKindCall:  return gen_call_linux_x86_64(gen, expr.as.call, target);
+  case ExprKindVar:   return gen_var_linux_x86_64(gen, expr.as.var, target);
+  case ExprKindFunc:  return gen_func_linux_x86_64(gen, expr.as.func, target);
   case ExprKindIf:    return gen_if_linux_x86_64(gen, expr.as.eef, target);
   }
 
@@ -306,7 +307,7 @@ char *gen_linux_x86_64(Metadata meta) {
 
     gen.scope_size = func.scope_size;
     gen_expr_linux_x86_64(&gen, func.expr->body,
-                          STR("rax", 3), true);
+                          TARGET(STR("rax", 3), true));
 
     if (func.scope_size != 0) {
       sb_push(&gen.sb, "    add rsp, ");

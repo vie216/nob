@@ -85,6 +85,7 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
     def->size = 8;
     def->next = checker->def;
     checker->def = def;
+    expr.as.func->def = def;
 
     i32 prev_func_scope_size = checker->func_scope_size;
     checker->func_scope_size = 0;
@@ -109,7 +110,7 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
   } break;
 
   default: {
-    ERROR("Not implemented\n");
+    ERROR("Unreachable\n");
     exit(1);
   }
   }

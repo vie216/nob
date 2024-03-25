@@ -89,6 +89,8 @@ struct ExprFunc {
   Str  name;
   Args args;
   Expr body;
+  // Metadata
+  Def *def;
 };
 
 struct ExprIf {
