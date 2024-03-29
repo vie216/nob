@@ -26,8 +26,9 @@ typedef struct {
   i32   len;
 } StringBuilder;
 
-void sb_push_i32(StringBuilder *sb, i32 num);
-void sb_push_str(StringBuilder *sb, Str str);
+Str sb_to_str(StringBuilder sb);
 void sb_push(StringBuilder *sb, char *str);
+void sb_push_str(StringBuilder *sb, Str str);
+void sb_push_i32(StringBuilder *sb, i32 num);
 
 #endif // STR_H

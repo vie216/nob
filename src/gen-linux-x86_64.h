@@ -17,7 +17,7 @@ typedef struct {
   i32           ifs_count;
 } Generator;
 
-char *gen_linux_x86_64(Metadata meta);
+Str gen_linux_x86_64(Metadata meta);
 Def *intrinsic_defs_linux_x86_64(void);
 
 #endif // GEN_H

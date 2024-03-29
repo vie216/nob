@@ -147,24 +147,24 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
 
     return target.str;
   } else if (lit->kind == LitKindStr) {
-    DA_APPEND(gen->strings, lit->lit);
+    StringBuilder sb = {0};
+    sb_push(&sb, "db_");
+    sb_push_i32(&sb, gen->strings.len);
+    Str db_name = sb_to_str(sb);
 
-    if (!target.strict) {
-      char *name = malloc(lit->lit.len + 3);
-      name[0] = 'd';
-      name[1] = 'b';
-      name[2] = '_';
-      memmove(name + 3, lit->lit.ptr, lit->lit.len);
-      return (Str) {
-        .ptr = name,
-        .len = lit->lit.len + 3,
-      };
-    }
+    if (!target.strict)
+      return db_name;
+
+    Str db = {
+      .ptr = lit->lit.ptr + 1,
+      .len = lit->lit.len - 2,
+    };
+    DA_APPEND(gen->strings, db);
 
     sb_push(&gen->sb, "    mov ");
     sb_push_str(&gen->sb, target.str);
-    sb_push(&gen->sb, ", db_");
-    sb_push_str(&gen->sb, lit->lit);
+    sb_push(&gen->sb, ", ");
+    sb_push_str(&gen->sb, db_name);
     sb_push(&gen->sb, "\n");
 
     return target.str;
@@ -321,7 +321,7 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
   exit(1);
 }
 
-char *gen_linux_x86_64(Metadata meta) {
+Str gen_linux_x86_64(Metadata meta) {
   Generator gen = {0};
 
   sb_push(&gen.sb, "format ELF64 executable\n");
@@ -378,11 +378,15 @@ char *gen_linux_x86_64(Metadata meta) {
     sb_push(&gen.sb, "db_");
     sb_push_i32(&gen.sb, i);
     sb_push(&gen.sb, ": db ");
-    sb_push_str(&gen.sb, gen.strings.items[i]);
+    for (i32 j = 0; j < gen.strings.items[i].len; ++j) {
+      if (j != 0)
+        sb_push(&gen.sb, ", ");
+      sb_push_i32(&gen.sb, gen.strings.items[i].ptr[j]);
+    }
     sb_push(&gen.sb, ", 0\n");
   }
 
-  return gen.sb.buffer;
+  return sb_to_str(gen.sb);
 }
 
 #define INTRINSIC(_name)         \

@@ -51,6 +51,23 @@ static void sb_reserve_space(StringBuilder *sb, i32 amount) {
   }
 }
 
+Str sb_to_str(StringBuilder sb) {
+  return (Str) {
+    .ptr = sb.buffer,
+    .len = sb.len,
+  };
+}
+
+void sb_push(StringBuilder *sb, char *str) {
+  sb_push_str(sb, str_new(str));
+}
+
+void sb_push_str(StringBuilder *sb, Str str) {
+  sb_reserve_space(sb, str.len);
+  memmove(sb->buffer + sb->len, str.ptr, str.len);
+  sb->len += str.len;
+}
+
 void sb_push_i32(StringBuilder *sb, i32 num) {
   i32 _num = num;
   i32 len = 1;
@@ -62,16 +79,4 @@ void sb_push_i32(StringBuilder *sb, i32 num) {
 
   snprintf(sb->buffer + sb->len, len + 1, "%d", num);
   sb->len += len;
-  sb->buffer[sb->len] = '\0';
-}
-
-void sb_push_str(StringBuilder *sb, Str str) {
-  sb_reserve_space(sb, str.len);
-  memmove(sb->buffer + sb->len, str.ptr, str.len);
-  sb->len += str.len;
-  sb->buffer[sb->len] = '\0';
-}
-
-void sb_push(StringBuilder *sb, char *str) {
-  sb_push_str(sb, str_new(str));
 }

@@ -65,7 +65,7 @@ Str read_file(char *path) {
   return content;
 }
 
-char *write_asm(char *path, char *_asm) {
+char *write_asm(char *path, Str _asm) {
   i32 path_len = strlen(path);
   char *new_path = malloc(path_len + 5);
   for (i32 i = 0; i < path_len; ++i)
@@ -77,7 +77,7 @@ char *write_asm(char *path, char *_asm) {
   new_path[path_len + 4] = '\0';
 
   FILE *file = fopen(new_path, "w");
-  fprintf(file, _asm);
+  fprintf(file, "%.*s", _asm.len, _asm.ptr);
   fclose(file);
 
   return new_path;
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
   INFO("Type checking\n");
   Metadata meta = add_metadata(program, intrinsic_defs_linux_x86_64());
   INFO("Compiling\n");
-  char *_asm = gen_linux_x86_64(meta);
+  Str _asm = gen_linux_x86_64(meta);
   INFO("Assembling\n");
   char *asm_path = write_asm(output_path, _asm);
   assemble(asm_path);
