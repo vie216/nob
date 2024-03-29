@@ -76,6 +76,35 @@ static bool parser_eof(Parser *parser) {
   return parser->current >= parser->source.ptr + parser->source.len;
 }
 
+Str escape_str(Str str) {
+  Str result = {
+    .ptr = aalloc(str.len),
+    .len = 0,
+  };
+
+  bool escaped;
+  for (i32 i = 0; i < str.len; ++i) {
+    if (escaped) {
+      switch (str.ptr[i]) {
+      case 'n': result.ptr[result.len++] = '\n'; break;
+      case 'r': result.ptr[result.len++] = '\r'; break;
+      case 't': result.ptr[result.len++] = '\t'; break;
+      case '\\': result.ptr[result.len++] = '\\'; break;
+      case '"': result.ptr[result.len++] = '"'; break;
+      default:
+        ERROR("Unknown escape character: %c", result.ptr[result.len]);
+        exit(1);
+      }
+    } else if (str.ptr[i] != '\\') {
+      result.ptr[result.len++] = str.ptr[i];
+    }
+
+    escaped = !escaped && str.ptr[i] == '\\';
+  }
+
+  return result;
+}
+
 static Token parser_next_token(Parser *parser) {
   while (!parser_eof(parser) && (isspace(*parser->current) || *parser->current == '#')) {
     if (*parser->current == '#') {
@@ -180,12 +209,16 @@ static Token parser_next_token(Parser *parser) {
     exit(1);
   }
 
+  Str str = {
+    .ptr = start,
+    .len = parser->current - start,
+  };
+  if (kind == TokenKindStrLit)
+    str = escape_str(str);
+
   return parser->last_token = (Token) {
     .kind = kind,
-    .str = {
-      .ptr = start,
-      .len = (i32) (parser->current - start),
-    },
+    .str = str,
     .row = parser->row + 1,
     .col = start - parser->bol + 1,
   };
