@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gen.h"
+#include "gen-linux-x86_64.h"
 #include "log.h"
 #include "arena.h"
 

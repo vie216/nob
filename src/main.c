@@ -7,7 +7,7 @@
 #include "log.h"
 #include "parser.h"
 #include "checker.h"
-#include "gen.h"
+#include "gen-linux-x86_64.h"
 
 void parse_args(int argc, char **argv,
                 char **input_path,
