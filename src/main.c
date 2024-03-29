@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
   INFO("Parsing\n");
   Expr program = parse_program(source_code, input_path);
   INFO("Type checking\n");
-  Metadata meta = add_metadata(program);
+  Metadata meta = add_metadata(program, intrinsic_defs_linux_x86_64());
   INFO("Compiling\n");
   char *_asm = gen_linux_x86_64(meta);
   INFO("Assembling\n");

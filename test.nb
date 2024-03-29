@@ -1,12 +1,12 @@
-let main() = bar()
+let main() = (
+  asm(";; inline assembly test")
+  func()
+)
 
 let func() = (
   let x = 5
   let y = x + 6
 
-  if 1: y
-  else: x
+  if 1: y / 5
+  else: y % 5
 )
-
-let foo() = func() + func()
-let bar() = 6 + func()

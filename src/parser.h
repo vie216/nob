@@ -4,8 +4,7 @@
 #include "str.h"
 
 typedef enum {
-  ExprKindBinOp = 0,
-  ExprKindLit,
+  ExprKindLit = 0,
   ExprKindBlock,
   ExprKindIdent,
   ExprKindCall,
@@ -14,7 +13,6 @@ typedef enum {
   ExprKindIf,
 } ExprKind;
 
-typedef struct ExprBinOp ExprBinOp;
 typedef struct ExprLit   ExprLit;
 typedef struct ExprBlock ExprBlock;
 typedef struct ExprIdent ExprIdent;
@@ -26,7 +24,6 @@ typedef struct ExprIf    ExprIf;
 typedef struct Def Def;
 
 typedef union {
-  ExprBinOp *bin_op;
   ExprLit   *lit;
   ExprBlock *block;
   ExprIdent *ident;
@@ -40,12 +37,6 @@ typedef struct {
   ExprKind kind;
   ExprAs   as;
 } Expr;
-
-struct ExprBinOp {
-  Str  op;
-  Expr lhs;
-  Expr rhs;
-};
 
 typedef enum {
   LitKindInt = 0,

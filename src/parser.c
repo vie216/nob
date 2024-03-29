@@ -350,6 +350,11 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.as.ident->ident = token.str;
   } else if (token.kind == TokenKindOParen) {
     lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
+    if (lhs.as.block->len == 1) {
+      Expr *items = lhs.as.block->items;
+      lhs = lhs.as.block->items[0];
+      free(items);
+    }
   } else if (token.kind == TokenKindLet) {
     lhs = parser_parse_let(parser);
   } else if (token.kind == TokenKindIf) {
@@ -388,8 +393,13 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
     expr->func.as.ident = aalloc(sizeof(ExprIdent));
     expr->func.as.ident->ident = token.str;
     expr->args = aalloc(sizeof(ExprBlock));
-    DA_APPEND(*expr->args, lhs);
-    DA_APPEND(*expr->args, rhs);
+    *expr->args = (ExprBlock) {
+      .items = aalloc(sizeof(Expr) * 2),
+      .len = 2,
+      .cap = 2,
+    };
+    expr->args->items[0] = lhs;
+    expr->args->items[1] = rhs;
 
     lhs.kind = ExprKindCall;
     lhs.as.call = expr;
@@ -399,15 +409,17 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
 }
 
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with) {
-  Expr block;
-  block.kind = ExprKindBlock;
-  block.as.block = aalloc(sizeof(ExprBlock));
-  block.as.block->len = 0;
-  block.as.block->cap = 0;
+  ExprBlock *block;
+  block = aalloc(sizeof(ExprBlock));
+  *block = (ExprBlock) {
+    .items = NULL,
+    .len = 0,
+    .cap = 0,
+  };
 
   while (parser_peek_token(parser).kind != end_with) {
     Expr expr = parser_parse_expr(parser, 0);
-    DA_APPEND(*block.as.block, expr);
+    DA_APPEND(*block, expr);
 
     if (parser_peek_token(parser).kind != end_with)
       parser_expect_token(parser, sep);
@@ -415,13 +427,12 @@ static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with
 
   parser_next_token(parser);
 
-  if (block.as.block->len == 1) {
-    Expr expr = block.as.block->items[0];
-    free(block.as.block->items);
-    return expr;
-  }
-
-  return block;
+  return (Expr) {
+    .kind = ExprKindBlock,
+    .as = {
+      .block = block,
+    },
+  };
 }
 
 Expr parse_program(Str source, char *file_path) {

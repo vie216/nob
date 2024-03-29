@@ -6,6 +6,7 @@
 #include "defs.h"
 
 #define STR(ptr, len) ((Str) { ptr, len })
+#define STR_LIT(ptr) ((Str) { ptr, sizeof(ptr) - 1 })
 
 typedef struct {
   char *ptr;

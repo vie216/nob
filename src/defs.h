@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
+
 #define DA_APPEND(da, element)                                        \
   do {                                                                \
     if ((da).cap <= (da).len) {                                       \
@@ -13,11 +14,18 @@
         (da).items = realloc((da).items, sizeof(element) * (da).cap); \
       } else {                                                        \
         (da).cap = 1;                                                 \
-        (da).items = malloc(sizeof(element) * (da).cap);              \
+        (da).items = malloc(sizeof(element));                         \
       }                                                               \
     }                                                                 \
     (da).items[(da).len++] = element;                                 \
   } while (0)
+
+#define LL_APPEND(ll, type)           \
+  do {                                \
+    type *new = aalloc(sizeof(type)); \
+    new->next = ll;                   \
+    ll = new;                         \
+  } while(0)
 
 typedef char           i8;
 typedef unsigned char  u8;

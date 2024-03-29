@@ -4,20 +4,7 @@
 
 #include "gen.h"
 #include "log.h"
-
-typedef struct {
-  Str *items;
-  i32 len, cap;
-} Strings;
-
-typedef struct {
-  StringBuilder sb;
-  Strings       strings;
-  i32           regs_used;
-  i32           scope_size;
-  i32           stack_pointer;
-  i32           ifs_count;
-} Generator;
+#include "arena.h"
 
 typedef struct {
   Str  str;
@@ -27,8 +14,8 @@ typedef struct {
 #define TARGET(loc, strict) ((Target) { loc, strict })
 
 static Str gen_reserve_reg(Generator *gen) {
-  static Str reg_names[] = { STR("rbx", 3), STR("r12", 3), STR("r13", 3),
-                             STR("r14", 3), STR("r15", 3) };
+  static Str reg_names[] = { STR_LIT("rbx"), STR_LIT("r12"), STR_LIT("r13"),
+                             STR_LIT("r14"), STR_LIT("r15") };
 
   if (gen->regs_used >= (i32) ARRAY_LEN(reg_names)) {
     ERROR("Exceeded amount of available registers");
@@ -40,27 +27,26 @@ static Str gen_reserve_reg(Generator *gen) {
 
 static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target);
 
-static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Target target) {
-  if (str_eq(bin_op->op, STR("+", 1))
-      || str_eq(bin_op->op, STR("-", 1))
-      || str_eq(bin_op->op, STR("*", 1))) {
-    /* Yes, I didn't come up with a better name */
-    bool flag = str_eq(target.str, STR("rax", 3)) &&
-                bin_op->rhs.kind == ExprKindCall;
+static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args, Target target) {
+  bool flag = str_eq(target.str, STR_LIT("rax")) &&
+              args->items[1].kind == ExprKindCall;
 
+  if (str_eq(name, STR_LIT("+")) ||
+      str_eq(name, STR_LIT("-")) ||
+      str_eq(name, STR_LIT("*"))) {
     Str lhs_loc = target.str;
     if (flag)
       lhs_loc = gen_reserve_reg(gen);
-    Str lhs = gen_expr_linux_x86_64(gen, bin_op->lhs, TARGET(lhs_loc, true));
+    Str lhs = gen_expr_linux_x86_64(gen, args->items[0], TARGET(lhs_loc, true));
 
     Str rhs_loc = gen_reserve_reg(gen);
-    Str rhs = gen_expr_linux_x86_64(gen, bin_op->rhs, TARGET(rhs_loc, false));
+    Str rhs = gen_expr_linux_x86_64(gen, args->items[1], TARGET(rhs_loc, false));
 
     gen->regs_used -= 1 + flag;
 
-    if (str_eq(bin_op->op, STR("+", 1)))
+    if (str_eq(name, STR_LIT("+")))
       sb_push(&gen->sb, "    add ");
-    else if (str_eq(bin_op->op, STR("-", 1)))
+    else if (str_eq(name, STR_LIT("-")))
       sb_push(&gen->sb, "    sub ");
     else
       sb_push(&gen->sb, "    imul ");
@@ -76,11 +62,67 @@ static Str gen_bin_op_linux_x86_64(Generator *gen, ExprBinOp *bin_op, Target tar
     }
 
     return lhs;
+  } else if (str_eq(name, STR_LIT("/")) ||
+             str_eq(name, STR_LIT("%"))) {
+    Str lhs_loc = STR_LIT("rax");
+    if (flag)
+      lhs_loc = gen_reserve_reg(gen);
+    gen_expr_linux_x86_64(gen, args->items[0], TARGET(lhs_loc, true));
+
+    Str rhs_loc = gen_reserve_reg(gen);
+    Str rhs = gen_expr_linux_x86_64(gen, args->items[1], TARGET(rhs_loc, true));
+
+    gen->regs_used -= 1 + flag;
+
+    if (flag) {
+      sb_push(&gen->sb, "    mov rax, ");
+      sb_push_str(&gen->sb, lhs_loc);
+      sb_push(&gen->sb, "\n");
+    }
+
+    sb_push(&gen->sb, "    cdq\n");
+    sb_push(&gen->sb, "    idiv ");
+    sb_push_str(&gen->sb, rhs);
+    sb_push(&gen->sb, "\n");
+
+    Str target_loc = str_eq(name, STR_LIT("/")) ? STR_LIT("rax") : STR_LIT("rdx");
+
+    if (target.strict && !str_eq(target.str, target_loc)) {
+      sb_push(&gen->sb, "    mov ");
+      sb_push_str(&gen->sb, target.str);
+      sb_push(&gen->sb, ", ");
+      sb_push_str(&gen->sb, target_loc);
+      sb_push(&gen->sb, "\n");
+
+      return target.str;
+    }
+
+    return target_loc;
+  } else if (str_eq(name, STR_LIT("asm"))) {
+    if (args->len != 1) {
+      ERROR("`asm` intrinsic takes exactly one argument, ");
+      fprintf(stderr, "%d were given\n", args->len);
+      exit(1);
+    }
+
+    Expr arg = args->items[0];
+
+    if (arg.kind != ExprKindLit || arg.as.lit->kind != LitKindStr) {
+      ERROR("Argument of `asm` intrinsic should be a string literal\n");
+      exit(1);
+    }
+
+    arg.as.lit->lit.ptr += 1;
+    arg.as.lit->lit.len -= 2;
+
+    sb_push(&gen->sb, "    ;; inline begin\n");
+    sb_push_str(&gen->sb, arg.as.lit->lit);
+    sb_push(&gen->sb, "\n    ;; inline end\n");
+
+    return target.str;
   }
 
-  ERROR("Unknown operator: `");
-  str_fprint(stderr, bin_op->op);
-  fprintf(stderr, "`\n");
+  ERROR("Unreachable\n");
   exit(1);
 }
 
@@ -89,7 +131,7 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
     if (!target.strict)
       return lit->lit;
 
-    if (str_eq(lit->lit, STR("0", 1))) {
+    if (str_eq(lit->lit, STR_LIT("0"))) {
       sb_push(&gen->sb, "    xor ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
@@ -145,7 +187,7 @@ static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Target targe
     return gen_expr_linux_x86_64(gen, last, target);
   }
 
-  return STR("rax", 3);
+  return STR_LIT("rax");
 }
 
 static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Target target) {
@@ -162,8 +204,11 @@ static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Target targe
 }
 
 static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) {
-  static Str arg_reg_names[] = { STR("rdi", 3), STR("rsi", 3), STR("rdx", 3),
-                                 STR("rcx", 3), STR("r8", 2), STR("r9", 2) };
+  if (call->func.kind == ExprKindIdent && call->func.as.ident->def->is_intrinsic)
+    return gen_intrinsic_linux_x86_64(gen, call->func.as.ident->ident, call->args, target);
+
+  static Str arg_reg_names[] = { STR_LIT("rdi"), STR_LIT("rsi"), STR_LIT("rdx"),
+                                 STR_LIT("rcx"), STR_LIT("r8"), STR_LIT("r9") };
 
   if (call->args->len > (i32) ARRAY_LEN(arg_reg_names)) {
     ERROR("Exceeded amount of registers for function arguments\n");
@@ -174,19 +219,21 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
   for (i32 i = 0; i < call->args->len; ++i)
     gen_expr_linux_x86_64(gen, call->args->items[i], TARGET(arg_reg_names[i], true));
 
-  Str callee = gen_expr_linux_x86_64(gen, call->func, TARGET(STR("rax", 3), false));
+  Str callee = gen_expr_linux_x86_64(gen, call->func, TARGET(STR_LIT("rax"), false));
 
   sb_push(&gen->sb, "    call ");
   sb_push_str(&gen->sb, callee);
   sb_push(&gen->sb, "\n");
 
-  if (target.strict && !str_eq(target.str, STR("rax", 3))) {
+  if (target.strict && !str_eq(target.str, STR_LIT("rax"))) {
     sb_push(&gen->sb, "    mov ");
     sb_push_str(&gen->sb, target.str);
     sb_push(&gen->sb, ", rax\n");
   }
 
-  return target.strict ? target.str : STR("rax", 3);
+  if (target.strict)
+    return target.str;
+  return STR_LIT("rax");
 }
 
 static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
@@ -261,7 +308,6 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
 
 static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
   switch (expr.kind) {
-  case ExprKindBinOp: return gen_bin_op_linux_x86_64(gen, expr.as.bin_op, target);
   case ExprKindLit:   return gen_lit_linux_x86_64(gen, expr.as.lit, target);
   case ExprKindBlock: return gen_block_linux_x86_64(gen, expr.as.block, target);
   case ExprKindIdent: return gen_ident_linux_x86_64(gen, expr.as.ident, target);
@@ -307,7 +353,7 @@ char *gen_linux_x86_64(Metadata meta) {
 
     gen.scope_size = func.scope_size;
     gen_expr_linux_x86_64(&gen, func.expr->body,
-                          TARGET(STR("rax", 3), true));
+                          TARGET(STR_LIT("rax"), true));
 
     if (func.scope_size != 0) {
       sb_push(&gen.sb, "    add rsp, ");
@@ -337,4 +383,25 @@ char *gen_linux_x86_64(Metadata meta) {
   }
 
   return gen.sb.buffer;
+}
+
+#define INTRINSIC(_name)         \
+  do {                           \
+    LL_APPEND(defs, Def);        \
+    defs->name = STR_LIT(_name); \
+    defs->size = 8;              \
+    defs->is_intrinsic = true;   \
+  } while (0)
+
+Def *intrinsic_defs_linux_x86_64(void) {
+  Def *defs = NULL;
+
+  INTRINSIC("+");
+  INTRINSIC("-");
+  INTRINSIC("*");
+  INTRINSIC("/");
+  INTRINSIC("%");
+  INTRINSIC("asm");
+
+  return defs;
 }

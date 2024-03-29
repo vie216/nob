@@ -6,6 +6,7 @@
 struct Def {
   Str  name, loc;
   i32  size;
+  bool is_intrinsic;
   Def *next;
 };
 
@@ -20,10 +21,10 @@ typedef struct {
 } Funcs;
 
 typedef struct {
-  Def   *def;
+  Def   *defs;
   Funcs  funcs;
 } Metadata;
 
-Metadata add_metadata(Expr program);
+Metadata add_metadata(Expr program, Def *intrinsic_defs);
 
 #endif // CHECKER_H
