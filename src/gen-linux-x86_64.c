@@ -115,9 +115,8 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     arg.as.lit->lit.ptr += 1;
     arg.as.lit->lit.len -= 2;
 
-    sb_push(&gen->sb, "    ;; inline begin\n");
     sb_push_str(&gen->sb, arg.as.lit->lit);
-    sb_push(&gen->sb, "\n    ;; inline end\n");
+    sb_push(&gen->sb, "\n");
 
     return target.str;
   }
