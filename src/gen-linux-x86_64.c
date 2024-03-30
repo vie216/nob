@@ -388,23 +388,20 @@ Str gen_linux_x86_64(Metadata meta) {
   return sb_to_str(gen.sb);
 }
 
-#define INTRINSIC(_name)         \
-  do {                           \
-    LL_APPEND(defs, Def);        \
-    defs->name = STR_LIT(_name); \
-    defs->size = 8;              \
-    defs->is_intrinsic = true;   \
-  } while (0)
-
 Def *intrinsic_defs_linux_x86_64(void) {
   Def *defs = NULL;
 
-  INTRINSIC("+");
-  INTRINSIC("-");
-  INTRINSIC("*");
-  INTRINSIC("/");
-  INTRINSIC("%");
-  INTRINSIC("asm");
+  static Str intrinsics[] = {
+    STR_LIT("+"), STR_LIT("-"), STR_LIT("*"),
+    STR_LIT("/"), STR_LIT("%"), STR_LIT("asm"),
+  };
+
+  for (i32 i = 0; i < (i32) ARRAY_LEN(intrinsics); ++i) {
+    LL_APPEND(defs, Def);
+    defs->name = intrinsics[i];
+    defs->size = 8;
+    defs->is_intrinsic = true;
+  }
 
   return defs;
 }
