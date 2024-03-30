@@ -82,7 +82,7 @@ Str escape_str(Str str) {
     .len = 0,
   };
 
-  bool escaped;
+  bool escaped = false;
   for (i32 i = 0; i < str.len; ++i) {
     if (escaped) {
       switch (str.ptr[i]) {
