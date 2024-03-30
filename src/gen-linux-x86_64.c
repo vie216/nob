@@ -13,14 +13,20 @@ typedef struct {
 
 #define TARGET(loc, strict) ((Target) { loc, strict })
 
-static Str gen_reserve_reg(Generator *gen) {
-  static Str reg_names[] = { STR_LIT("rbx"), STR_LIT("r12"), STR_LIT("r13"),
-                             STR_LIT("r14"), STR_LIT("r15") };
+static Str reg_names[] = { STR_LIT("rbx"), STR_LIT("r12"), STR_LIT("r13"),
+                           STR_LIT("r14"), STR_LIT("r15") };
 
+static Str arg_reg_names[] = { STR_LIT("rdi"), STR_LIT("rsi"), STR_LIT("rdx"),
+                               STR_LIT("rcx"), STR_LIT("r8"), STR_LIT("r9") };
+
+static Str gen_reserve_reg(Generator *gen) {
   if (gen->regs_used >= (i32) ARRAY_LEN(reg_names)) {
     ERROR("Exceeded amount of available registers");
     exit(1);
   }
+
+  if (gen->regs_used >= gen->ctx.max_regs_used)
+    gen->ctx.max_regs_used = gen->regs_used + 1;
 
   return reg_names[gen->regs_used++];
 }
@@ -149,7 +155,7 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
     StringBuilder sb = {0};
     sb_push(&sb, "db_");
     sb_push_i32(&sb, gen->strings.len);
-    Str db_name = sb_to_str(sb);
+    Str db_name = sb_to_str(&sb);
 
     if (!target.strict)
       return db_name;
@@ -174,12 +180,8 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
 }
 
 static Str gen_block_linux_x86_64(Generator *gen, ExprBlock *block, Target target) {
-  Str mem = gen_reserve_reg(gen);
-
   for (i32 i = 0; i + 1 < block->len; ++i)
-    gen_expr_linux_x86_64(gen, block->items[i], TARGET(mem, false));
-
-  gen->regs_used--;
+    gen_expr_linux_x86_64(gen, block->items[i], TARGET(STR_LIT("rax"), false));
 
   if (block->len > 0) {
     Expr last = block->items[block->len - 1];
@@ -206,14 +208,14 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
   if (call->func.kind == ExprKindIdent && call->func.as.ident->def->is_intrinsic)
     return gen_intrinsic_linux_x86_64(gen, call->func.as.ident->ident, call->args, target);
 
-  static Str arg_reg_names[] = { STR_LIT("rdi"), STR_LIT("rsi"), STR_LIT("rdx"),
-                                 STR_LIT("rcx"), STR_LIT("r8"), STR_LIT("r9") };
-
   if (call->args->len > (i32) ARRAY_LEN(arg_reg_names)) {
     ERROR("Exceeded amount of registers for function arguments\n");
     INFO("TODO: use stack when this happens\n");
     exit(1);
   }
+
+  if (call->args->len > gen->ctx.max_arg_regs_used)
+    gen->ctx.max_arg_regs_used = call->args->len;
 
   for (i32 i = 0; i < call->args->len; ++i)
     gen_expr_linux_x86_64(gen, call->args->items[i], TARGET(arg_reg_names[i], true));
@@ -236,11 +238,11 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
 }
 
 static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
-  gen->stack_pointer += var->def->size;
+  gen->ctx.stack_pointer += var->def->size;
 
   StringBuilder sb = {0};
   sb_push(&sb, "qword [rsp + ");
-  sb_push_i32(&sb, gen->scope_size - gen->stack_pointer);
+  sb_push_i32(&sb, gen->ctx.scope_size - gen->ctx.stack_pointer);
   sb_push(&sb, "]");
   var->def->loc = (Str) {
     .ptr = sb.buffer,
@@ -322,70 +324,74 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
 
 Str gen_linux_x86_64(Metadata meta) {
   Generator gen = {0};
+  StringBuilder sb = {0};
 
-  sb_push(&gen.sb, "format ELF64 executable\n");
-  sb_push(&gen.sb, "entry _start\n");
-  sb_push(&gen.sb, "segment readable executable\n");
-  sb_push(&gen.sb, "_start:\n");
-  sb_push(&gen.sb, "    call main\n");
-  sb_push(&gen.sb, "    mov rdi, rax\n");
-  sb_push(&gen.sb, "    mov rax, 60\n");
-  sb_push(&gen.sb, "    syscall\n");
+  sb_push(&sb, "format ELF64 executable\n");
+  sb_push(&sb, "segment readable executable\n");
+  sb_push(&sb, "entry _start\n");
+  sb_push(&sb, "_start:\n");
+  sb_push(&sb, "    call main\n");
+  sb_push(&sb, "    mov rdi, rax\n");
+  sb_push(&sb, "    mov rax, 60\n");
+  sb_push(&sb, "    syscall\n");
 
   for (i32 i = 0; i < meta.funcs.len; ++i) {
     Func func = meta.funcs.items[i];
 
-    sb_push_str(&gen.sb, func.expr->name);
-    sb_push(&gen.sb, ":\n");
-
-    sb_push(&gen.sb, "    push rbx\n");
-    sb_push(&gen.sb, "    push r12\n");
-    sb_push(&gen.sb, "    push r13\n");
-    sb_push(&gen.sb, "    push r14\n");
-    sb_push(&gen.sb, "    push r15\n");
-
-    if (func.scope_size != 0) {
-      sb_push(&gen.sb, "    sub rsp, ");
-      sb_push_i32(&gen.sb, func.scope_size);
-      sb_push(&gen.sb, "\n");
-    }
-
-    gen.scope_size = func.scope_size;
+    gen.sb.len = 0;
+    gen.ctx = (FunctionContext) { .scope_size = func.scope_size };
     gen_expr_linux_x86_64(&gen, func.expr->body,
                           TARGET(STR_LIT("rax"), true));
 
-    if (func.scope_size != 0) {
-      sb_push(&gen.sb, "    add rsp, ");
-      sb_push_i32(&gen.sb, func.scope_size);
-      sb_push(&gen.sb, "\n");
+    sb_push_str(&sb, func.expr->name);
+    sb_push(&sb, ":\n");
+
+    for (i32 i = 0; i < gen.ctx.max_regs_used; ++i) {
+      sb_push(&sb, "    push ");
+      sb_push_str(&sb, reg_names[i]);
+      sb_push(&sb, "\n");
     }
 
-    sb_push(&gen.sb, "    pop r15\n");
-    sb_push(&gen.sb, "    pop r14\n");
-    sb_push(&gen.sb, "    pop r13\n");
-    sb_push(&gen.sb, "    pop r12\n");
-    sb_push(&gen.sb, "    pop rbx\n");
+    if (func.scope_size != 0) {
+      sb_push(&sb, "    sub rsp, ");
+      sb_push_i32(&sb, func.scope_size);
+      sb_push(&sb, "\n");
+    }
 
-    sb_push(&gen.sb, "    ret\n");
+    sb_push_str(&sb, sb_to_str(&gen.sb));
 
-    gen.scope_size = 0;
+    if (func.scope_size != 0) {
+      sb_push(&sb, "    add rsp, ");
+      sb_push_i32(&sb, func.scope_size);
+      sb_push(&sb, "\n");
+    }
+
+    for (i32 i = gen.ctx.max_regs_used - 1; i >= 0; --i) {
+      sb_push(&sb, "    pop ");
+      sb_push_str(&sb, reg_names[i]);
+      sb_push(&sb, "\n");
+    }
+
+    sb_push(&sb, "    ret\n");
   }
+
+  free(gen.sb.buffer);
 
   if (gen.strings.len > 0)
-    sb_push(&gen.sb, "segment readable\n");
+    sb_push(&sb, "segment readable\n");
   for (i32 i = 0; i < gen.strings.len; ++i) {
-    sb_push(&gen.sb, "db_");
-    sb_push_i32(&gen.sb, i);
-    sb_push(&gen.sb, ": db ");
+    sb_push(&sb, "db_");
+    sb_push_i32(&sb, i);
+    sb_push(&sb, ": db ");
     for (i32 j = 0; j < gen.strings.items[i].len; ++j) {
       if (j != 0)
-        sb_push(&gen.sb, ", ");
-      sb_push_i32(&gen.sb, gen.strings.items[i].ptr[j]);
+        sb_push(&sb, ", ");
+      sb_push_i32(&sb, gen.strings.items[i].ptr[j]);
     }
-    sb_push(&gen.sb, ", 0\n");
+    sb_push(&sb, ", 0\n");
   }
 
-  return sb_to_str(gen.sb);
+  return sb_to_str(&sb);
 }
 
 Def *intrinsic_defs_linux_x86_64(void) {

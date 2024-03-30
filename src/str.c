@@ -51,10 +51,10 @@ static void sb_reserve_space(StringBuilder *sb, i32 amount) {
   }
 }
 
-Str sb_to_str(StringBuilder sb) {
+Str sb_to_str(StringBuilder *sb) {
   return (Str) {
-    .ptr = sb.buffer,
-    .len = sb.len,
+    .ptr = sb->buffer,
+    .len = sb->len,
   };
 }
 

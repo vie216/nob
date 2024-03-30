@@ -1,7 +1,4 @@
-let main() = (
-  asm(";; inline assembly test")
-  func()
-)
+let main() = func()
 
 let func() = (
   let x = 5
