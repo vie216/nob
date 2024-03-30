@@ -288,7 +288,7 @@ static Expr parser_parse_let(Parser *parser) {
   Args args = {0};
   bool func = false;
 
-  Token name = parser_expect_token(parser, TokenKindIdent);
+  Token name = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
   Token token = parser_expect_token(parser, TokenKindOParen | TokenKindOp);
 
   if (token.kind == TokenKindOParen) {
