@@ -338,8 +338,26 @@ Str gen_linux_x86_64(Metadata meta) {
   for (i32 i = 0; i < meta.funcs.len; ++i) {
     Func func = meta.funcs.items[i];
 
+    if (func.args_count > (i32) ARRAY_LEN(arg_reg_names)) {
+      ERROR("Exceeded amount of registers for function arguments");
+      INFO("TODO: use stack when this happens");
+      exit(1);
+    }
+
+    func.expr->def->loc = func.expr->def->name;
+
+    Def *arg_def = func.arg_defs;
+    for (i32 i = 0; i < func.args_count; ++i) {
+      arg_def->loc = arg_reg_names[func.args_count - i - 1];
+      arg_def = arg_def->next;
+    }
+  }
+
+  for (i32 i = 0; i < meta.funcs.len; ++i) {
+    Func func = meta.funcs.items[i];
+
     gen.sb.len = 0;
-    gen.ctx = (FunctionContext) { .scope_size = func.scope_size };
+    gen.ctx = (FuncCtx) { .scope_size = func.scope_size };
     gen_expr_linux_x86_64(&gen, func.expr->body,
                           TARGET(STR_LIT("rax"), true));
 

@@ -13,6 +13,8 @@ struct Def {
 typedef struct {
   ExprFunc *expr;
   i32       scope_size;
+  Def      *arg_defs;
+  i32       args_count;
 } Func;
 
 typedef struct {

@@ -78,18 +78,27 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
     LL_APPEND(checker->defs, Def);
     expr.as.func->def = checker->defs;
     checker->defs->name = expr.as.func->name;
-    checker->defs->loc = expr.as.func->name;
     checker->defs->size = 8;
 
     Def *prev_defs = checker->defs;
     i32 prev_func_scope_size = checker->func_scope_size;
     checker->func_scope_size = 0;
 
+    Args args = expr.as.func->args;
+    for (i32 i = 0; i < args.len; ++i) {
+      LL_APPEND(checker->defs, Def);
+      checker->defs->name = args.items[i];
+      checker->defs->size = 8;
+    }
+    Def *arg_defs = checker->defs;
+
     add_metadata_to_expr(checker, expr.as.func->body, false);
 
     Func func = {
       .expr = expr.as.func,
       .scope_size = checker->func_scope_size,
+      .arg_defs = arg_defs,
+      .args_count = args.len,
     };
     DA_APPEND(checker->funcs, func);
 

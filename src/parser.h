@@ -55,7 +55,6 @@ struct ExprBlock {
 
 struct ExprIdent {
   Str ident;
-  // Metadata
   Def *def;
 };
 
@@ -67,7 +66,6 @@ struct ExprCall {
 struct ExprVar {
   Str  name;
   Expr value;
-  // Metadata
   Def *def;
 };
 
@@ -80,7 +78,6 @@ struct ExprFunc {
   Str  name;
   Args args;
   Expr body;
-  // Metadata
   Def *def;
 };
 
