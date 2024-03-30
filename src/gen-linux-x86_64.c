@@ -51,18 +51,18 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     gen->regs_used -= 1 + flag;
 
     if (str_eq(name, STR_LIT("+")))
-      sb_push(&gen->sb, "    add ");
+      sb_push(&gen->sb, "\tadd ");
     else if (str_eq(name, STR_LIT("-")))
-      sb_push(&gen->sb, "    sub ");
+      sb_push(&gen->sb, "\tsub ");
     else
-      sb_push(&gen->sb, "    imul ");
+      sb_push(&gen->sb, "\timul ");
     sb_push_str(&gen->sb, lhs);
     sb_push(&gen->sb, ", ");
     sb_push_str(&gen->sb, rhs);
     sb_push(&gen->sb, "\n");
 
     if (flag) {
-      sb_push(&gen->sb, "    mov rax, ");
+      sb_push(&gen->sb, "\tmov rax, ");
       sb_push_str(&gen->sb, lhs_loc);
       sb_push(&gen->sb, "\n");
     }
@@ -81,20 +81,20 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     gen->regs_used -= 1 + flag;
 
     if (flag) {
-      sb_push(&gen->sb, "    mov rax, ");
+      sb_push(&gen->sb, "\tmov rax, ");
       sb_push_str(&gen->sb, lhs_loc);
       sb_push(&gen->sb, "\n");
     }
 
-    sb_push(&gen->sb, "    cdq\n");
-    sb_push(&gen->sb, "    idiv ");
+    sb_push(&gen->sb, "\tcdq\n");
+    sb_push(&gen->sb, "\tidiv ");
     sb_push_str(&gen->sb, rhs);
     sb_push(&gen->sb, "\n");
 
     Str target_loc = str_eq(name, STR_LIT("/")) ? STR_LIT("rax") : STR_LIT("rdx");
 
     if (target.strict && !str_eq(target.str, target_loc)) {
-      sb_push(&gen->sb, "    mov ");
+      sb_push(&gen->sb, "\tmov ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, target_loc);
@@ -137,13 +137,13 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
       return lit->lit;
 
     if (str_eq(lit->lit, STR_LIT("0"))) {
-      sb_push(&gen->sb, "    xor ");
+      sb_push(&gen->sb, "\txor ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, "\n");
     } else {
-      sb_push(&gen->sb, "    mov ");
+      sb_push(&gen->sb, "\tmov ");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, ", ");
       sb_push_str(&gen->sb, lit->lit);
@@ -166,7 +166,7 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
     };
     DA_APPEND(gen->strings, db);
 
-    sb_push(&gen->sb, "    mov ");
+    sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, target.str);
     sb_push(&gen->sb, ", ");
     sb_push_str(&gen->sb, db_name);
@@ -195,7 +195,7 @@ static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Target targe
   if (!target.strict)
     return ident->def->loc;
 
-  sb_push(&gen->sb, "    mov ");
+  sb_push(&gen->sb, "\tmov ");
   sb_push_str(&gen->sb, target.str);
   sb_push(&gen->sb, ", ");
   sb_push_str(&gen->sb, ident->def->loc);
@@ -222,12 +222,12 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
 
   Str callee = gen_expr_linux_x86_64(gen, call->func, TARGET(STR_LIT("rax"), false));
 
-  sb_push(&gen->sb, "    call ");
+  sb_push(&gen->sb, "\tcall ");
   sb_push_str(&gen->sb, callee);
   sb_push(&gen->sb, "\n");
 
   if (target.strict && !str_eq(target.str, STR_LIT("rax"))) {
-    sb_push(&gen->sb, "    mov ");
+    sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, target.str);
     sb_push(&gen->sb, ", rax\n");
   }
@@ -252,7 +252,7 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
   Str value = gen_expr_linux_x86_64(gen, var->value, target);
 
   if (!str_eq(value, var->def->loc)) {
-    sb_push(&gen->sb, "    mov ");
+    sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, var->def->loc);
     sb_push(&gen->sb, ", ");
     sb_push_str(&gen->sb, value);
@@ -266,7 +266,7 @@ static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Target target) 
   if (!target.strict)
     return func->def->loc;
 
-  sb_push(&gen->sb, "    mov ");
+  sb_push(&gen->sb, "\tmov ");
   sb_push_str(&gen->sb, target.str);
   sb_push(&gen->sb, ", ");
   sb_push_str(&gen->sb, func->def->loc);
@@ -279,28 +279,28 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
   Str cond = gen_expr_linux_x86_64(gen, eef->cond, TARGET(target.str, true));
   i32 if_id = gen->ifs_count++;
 
-  sb_push(&gen->sb, "    cmp ");
+  sb_push(&gen->sb, "\tcmp ");
   sb_push_str(&gen->sb, cond);
   sb_push(&gen->sb, ", 0\n");
-  sb_push(&gen->sb, "    je else_");
+  sb_push(&gen->sb, "\tje else_");
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, "\n");
 
   gen_expr_linux_x86_64(gen, eef->body, TARGET(target.str, true));
 
   if (eef->has_else) {
-    sb_push(&gen->sb, "    jmp next_");
+    sb_push(&gen->sb, "\tjmp next_");
     sb_push_i32(&gen->sb, if_id);
     sb_push(&gen->sb, "\n");
   }
-  sb_push(&gen->sb, "  else_");
+  sb_push(&gen->sb, "else_");
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, ":\n");
 
   if (eef->has_else)
     gen_expr_linux_x86_64(gen, eef->elze, TARGET(target.str, true));
 
-  sb_push(&gen->sb, "  next_");
+  sb_push(&gen->sb, "next_");
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, ":\n");
 
@@ -330,10 +330,10 @@ Str gen_linux_x86_64(Metadata meta) {
   sb_push(&sb, "segment readable executable\n");
   sb_push(&sb, "entry _start\n");
   sb_push(&sb, "_start:\n");
-  sb_push(&sb, "    call main\n");
-  sb_push(&sb, "    mov rdi, rax\n");
-  sb_push(&sb, "    mov rax, 60\n");
-  sb_push(&sb, "    syscall\n");
+  sb_push(&sb, "\tcall main\n");
+  sb_push(&sb, "\tmov rdi, rax\n");
+  sb_push(&sb, "\tmov rax, 60\n");
+  sb_push(&sb, "\tsyscall\n");
 
   for (i32 i = 0; i < meta.funcs.len; ++i) {
     Func func = meta.funcs.items[i];
@@ -365,13 +365,13 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push(&sb, ":\n");
 
     for (i32 i = 0; i < gen.ctx.max_regs_used; ++i) {
-      sb_push(&sb, "    push ");
+      sb_push(&sb, "\tpush ");
       sb_push_str(&sb, reg_names[i]);
       sb_push(&sb, "\n");
     }
 
     if (func.scope_size != 0) {
-      sb_push(&sb, "    sub rsp, ");
+      sb_push(&sb, "\tsub rsp, ");
       sb_push_i32(&sb, func.scope_size);
       sb_push(&sb, "\n");
     }
@@ -379,18 +379,18 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push_str(&sb, sb_to_str(&gen.sb));
 
     if (func.scope_size != 0) {
-      sb_push(&sb, "    add rsp, ");
+      sb_push(&sb, "\tadd rsp, ");
       sb_push_i32(&sb, func.scope_size);
       sb_push(&sb, "\n");
     }
 
     for (i32 i = gen.ctx.max_regs_used - 1; i >= 0; --i) {
-      sb_push(&sb, "    pop ");
+      sb_push(&sb, "\tpop ");
       sb_push_str(&sb, reg_names[i]);
       sb_push(&sb, "\n");
     }
 
-    sb_push(&sb, "    ret\n");
+    sb_push(&sb, "\tret\n");
   }
 
   free(gen.sb.buffer);
@@ -403,10 +403,10 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push(&sb, ": db ");
     for (i32 j = 0; j < gen.strings.items[i].len; ++j) {
       if (j != 0)
-        sb_push(&sb, ", ");
+        sb_push(&sb, ",");
       sb_push_i32(&sb, gen.strings.items[i].ptr[j]);
     }
-    sb_push(&sb, ", 0\n");
+    sb_push(&sb, ",0\n");
   }
 
   return sb_to_str(&sb);
