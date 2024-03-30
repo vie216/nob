@@ -285,9 +285,8 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence);
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
 static Expr parser_parse_let(Parser *parser) {
-  Expr expr;
   Args args = {0};
-  bool func;
+  bool func = false;
 
   Token name = parser_expect_token(parser, TokenKindIdent);
   Token token = parser_expect_token(parser, TokenKindOParen | TokenKindOp);
@@ -316,6 +315,8 @@ static Expr parser_parse_let(Parser *parser) {
   }
 
   Expr value = parser_parse_expr(parser, 0);
+
+  Expr expr;
 
   if (func) {
     expr.kind = ExprKindFunc;
