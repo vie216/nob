@@ -363,10 +363,32 @@ static Expr parser_parse_if(Parser *parser) {
 
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
-  Token token = parser_expect_token(parser,
-                                    TokenKindIntLit | TokenKindIdent |
-                                    TokenKindOParen | TokenKindStrLit |
-                                    TokenKindLet | TokenKindIf);
+
+  Token token = parser_peek_token(parser);
+
+  if (token.kind == TokenKindOp) {
+    parser_next_token(parser);
+
+    lhs.kind = ExprKindCall;
+    lhs.as.call = aalloc(sizeof(ExprCall));
+    lhs.as.call->func.kind = ExprKindIdent;
+    lhs.as.call->func.as.ident = aalloc(sizeof(ExprIdent));
+    lhs.as.call->func.as.ident->ident = token.str;
+    lhs.as.call->args = aalloc(sizeof(ExprBlock));
+    *lhs.as.call->args = (ExprBlock) {
+      .items = aalloc(sizeof(Expr)),
+      .len = 1,
+      .cap = 1,
+    };
+    lhs.as.call->args->items[0] = parser_parse_lhs(parser);
+
+    return lhs;
+  }
+
+  token = parser_expect_token(parser,
+                              TokenKindIntLit | TokenKindIdent |
+                              TokenKindOParen | TokenKindStrLit |
+                              TokenKindLet | TokenKindIf);
 
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
