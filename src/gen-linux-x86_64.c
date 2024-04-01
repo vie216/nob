@@ -293,16 +293,18 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
     sb_push_i32(&gen->sb, if_id);
     sb_push(&gen->sb, "\n");
   }
+
   sb_push(&gen->sb, "else_");
   sb_push_i32(&gen->sb, if_id);
   sb_push(&gen->sb, ":\n");
 
-  if (eef->has_else)
+  if (eef->has_else) {
     gen_expr_linux_x86_64(gen, eef->elze, TARGET(target.str, true));
 
-  sb_push(&gen->sb, "next_");
-  sb_push_i32(&gen->sb, if_id);
-  sb_push(&gen->sb, ":\n");
+    sb_push(&gen->sb, "next_");
+    sb_push_i32(&gen->sb, if_id);
+    sb_push(&gen->sb, ":\n");
+  }
 
   return target.str;
 }
