@@ -30,9 +30,11 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
       add_metadata_to_expr(checker, expr.as.block->items[i], top_level);
 
     checker->defs = prev_defs;
+
+    return;
   } break;
 
-  case ExprKindLit: break;
+  case ExprKindLit: return;
 
   case ExprKindIdent: {
     expr.as.ident->def = defs_lookup(checker->defs, expr.as.ident->ident);
@@ -42,6 +44,8 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
       fputs("`\n", stderr);
       checker->has_error = true;
     }
+
+    return;
   } break;
 
   case ExprKindVar: {
@@ -53,6 +57,8 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
     checker->defs->size = 8;
 
     checker->func_scope_size += checker->defs->size;
+
+    return;
   } break;
 
   case ExprKindCall: {
@@ -61,6 +67,8 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
     ExprBlock *args = expr.as.call->args;
     for (i32 i = 0; i < args->len; ++i)
       add_metadata_to_expr(checker, args->items[i], false);
+
+    return;
   } break;
 
   case ExprKindFunc: {
@@ -104,6 +112,8 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
 
     checker->func_scope_size = prev_func_scope_size;
     checker->defs = prev_defs;
+
+    return;
   } break;
 
   case ExprKindIf: {
@@ -111,13 +121,20 @@ static void add_metadata_to_expr(Checker *checker, Expr expr, bool top_level) {
     add_metadata_to_expr(checker, expr.as.eef->body, false);
     if (expr.as.eef->has_else)
       add_metadata_to_expr(checker, expr.as.eef->elze, false);
+
+    return;
   } break;
 
-  default: {
-    ERROR("Unreachable\n");
-    exit(1);
+  case ExprKindWhile: {
+    add_metadata_to_expr(checker, expr.as.whail->cond, false);
+    add_metadata_to_expr(checker, expr.as.whail->body, false);
+
+    return;
+  } break;
   }
-  }
+
+  ERROR("Unreachable\n");
+  exit(1);
 }
 
 static void verify_top_level_expr(Checker *checker, Expr expr) {

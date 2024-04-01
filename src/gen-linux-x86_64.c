@@ -241,7 +241,7 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
   gen->ctx.stack_pointer += var->def->size;
 
   StringBuilder sb = {0};
-  sb_push(&sb, "qword [rsp + ");
+  sb_push(&sb, "qword [rsp+");
   sb_push_i32(&sb, gen->ctx.scope_size - gen->ctx.stack_pointer);
   sb_push(&sb, "]");
   var->def->loc = (Str) {
@@ -277,34 +277,65 @@ static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Target target) 
 
 static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
   Str cond = gen_expr_linux_x86_64(gen, eef->cond, TARGET(target.str, true));
-  i32 if_id = gen->ifs_count++;
+  i32 else_id = gen->label_count++;
+  i32 next_id = gen->label_count++;
 
   sb_push(&gen->sb, "\tcmp ");
   sb_push_str(&gen->sb, cond);
   sb_push(&gen->sb, ", 0\n");
-  sb_push(&gen->sb, "\tje else_");
-  sb_push_i32(&gen->sb, if_id);
+  sb_push(&gen->sb, "\tje .l");
+  sb_push_i32(&gen->sb, else_id);
   sb_push(&gen->sb, "\n");
 
-  gen_expr_linux_x86_64(gen, eef->body, TARGET(target.str, true));
+  gen_expr_linux_x86_64(gen, eef->body, TARGET(target.str, eef->has_else));
 
   if (eef->has_else) {
-    sb_push(&gen->sb, "\tjmp next_");
-    sb_push_i32(&gen->sb, if_id);
+    sb_push(&gen->sb, "\tjmp .l");
+    sb_push_i32(&gen->sb, next_id);
     sb_push(&gen->sb, "\n");
   }
 
-  sb_push(&gen->sb, "else_");
-  sb_push_i32(&gen->sb, if_id);
+  sb_push(&gen->sb, ".l");
+  sb_push_i32(&gen->sb, else_id);
   sb_push(&gen->sb, ":\n");
 
   if (eef->has_else) {
     gen_expr_linux_x86_64(gen, eef->elze, TARGET(target.str, true));
 
-    sb_push(&gen->sb, "next_");
-    sb_push_i32(&gen->sb, if_id);
+    sb_push(&gen->sb, ".l");
+    sb_push_i32(&gen->sb, next_id);
     sb_push(&gen->sb, ":\n");
   }
+
+  return target.str;
+}
+
+static Str gen_while_linux_x86_64(Generator *gen, ExprWhile *whail, Target target) {
+  i32 cond_id = gen->label_count++;
+  i32 next_id = gen->label_count++;
+
+  sb_push(&gen->sb, ".l");
+  sb_push_i32(&gen->sb, cond_id);
+  sb_push(&gen->sb, ":\n");
+
+  Str cond = gen_expr_linux_x86_64(gen, whail->cond, TARGET(target.str, true));
+
+  sb_push(&gen->sb, "\tcmp ");
+  sb_push_str(&gen->sb, cond);
+  sb_push(&gen->sb, ", 0\n");
+  sb_push(&gen->sb, "\tje .l");
+  sb_push_i32(&gen->sb, next_id);
+  sb_push(&gen->sb, "\n");
+
+  gen_expr_linux_x86_64(gen, whail->body, TARGET(target.str, false));
+
+  sb_push(&gen->sb, "\tjmp .l");
+  sb_push_i32(&gen->sb, cond_id);
+  sb_push(&gen->sb, "\n");
+
+  sb_push(&gen->sb, ".l");
+  sb_push_i32(&gen->sb, next_id);
+  sb_push(&gen->sb, ":\n");
 
   return target.str;
 }
@@ -318,6 +349,7 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
   case ExprKindVar:   return gen_var_linux_x86_64(gen, expr.as.var, target);
   case ExprKindFunc:  return gen_func_linux_x86_64(gen, expr.as.func, target);
   case ExprKindIf:    return gen_if_linux_x86_64(gen, expr.as.eef, target);
+  case ExprKindWhile: return gen_while_linux_x86_64(gen, expr.as.whail, target);
   }
 
   ERROR("Unreachable\n");

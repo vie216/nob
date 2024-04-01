@@ -20,7 +20,7 @@ typedef struct {
   Strings       strings;
   FuncCtx       ctx;
   i32           regs_used;
-  i32           ifs_count;
+  i32           label_count;
 } Generator;
 
 Str gen_linux_x86_64(Metadata meta);
