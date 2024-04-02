@@ -38,17 +38,17 @@ typedef struct {
   Token  last_token;
 } Parser;
 
-#define IS_OP(ch) !(isalnum(ch) || isspace(ch) \
-                    || ch == '"' || ch == '\'' \
-                    || ch == '(' || ch == ')'  \
-                    || ch == '{' || ch == '}'  \
-                    || ch == '[' || ch == ']'  \
-                    || ch == ';' || ch == ':'  \
-                    || ch == '#' || ch == ',')
-#define IS_EXPR_END(token) ((token).kind == TokenKindIntLit     \
-                            || (token).kind == TokenKindStrLit  \
-                            || (token).kind == TokenKindIdent   \
-                            || (token).kind == TokenKindCParen)
+#define IS_OP(ch) !(isalnum(ch) || isspace(ch) || \
+                    ch == '"' || ch == '\'' ||    \
+                    ch == '(' || ch == ')' ||     \
+                    ch == '{' || ch == '}' ||     \
+                    ch == '[' || ch == ']' ||     \
+                    ch == ';' || ch == ':' ||     \
+                    ch == '#' || ch == ',')
+#define IS_EXPR_END(token) ((token).kind == TokenKindIntLit ||  \
+                            (token).kind == TokenKindStrLit ||  \
+                            (token).kind == TokenKindIdent ||   \
+                            (token).kind == TokenKindCParen)
 
 static i32 op_precedence(Str op) {
   struct OpPrecedence {
@@ -287,28 +287,74 @@ static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
   return token;
 }
 
+static TypeExpr parser_parse_type_expr(Parser *parser) {
+  Token token = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
+  if (token.kind == TokenKindIdent) {
+    TypeExprIdent *ident = aalloc(sizeof(TypeExprIdent));
+    ident->ident = parser_expect_token(parser, TokenKindIdent).str;
+    return (TypeExpr) {
+      .kind = TypeExprKindIdent,
+      .as = { .ident = ident },
+    };
+  } else {
+    if (!str_eq(token.str, STR_LIT("&"))) {
+      PERROR("%s:%d:%d: ", "Unexpected ",
+             parser->file_path, token.row, token.col);
+      print_token_kind(token.kind);
+      fputs(", expected &\n", stderr);
+      exit(1);
+    }
+
+    TypeExprPtr *ptr = aalloc(sizeof(TypeExprPtr));
+    ptr->points_to = parser_parse_type_expr(parser);
+    return (TypeExpr) {
+      .kind = TypeExprKindPtr,
+      .as = { .ptr = ptr },
+    };
+  }
+}
+
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence);
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
 static Expr parser_parse_let(Parser *parser) {
   Args args = {0};
-  bool func = false;
+  bool is_func = false;
+  bool has_type = false;
+
+  TypeExprIdent *ident = aalloc(sizeof(TypeExprIdent));
+  ident->ident = STR_LIT("unit");
+  TypeExpr type = {
+    .kind = TypeExprKindIdent,
+    .as = { .ident = ident },
+  };
 
   Token name = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
-  Token token = parser_expect_token(parser, TokenKindOParen | TokenKindOp);
+  Token token = parser_expect_token(parser,
+                                    TokenKindOParen | TokenKindOp |
+                                    TokenKindColon);
 
   if (token.kind == TokenKindOParen) {
-    func = true;
+    is_func = true;
 
     while (parser_peek_token(*parser, 1).kind != TokenKindCParen) {
-      Token arg_name = parser_expect_token(parser, TokenKindIdent);
-      DA_APPEND(args, arg_name.str);
+      Arg arg = {0};
+      arg.name = parser_expect_token(parser, TokenKindIdent).str;
+      parser_expect_token(parser, TokenKindColon);
+      arg.type = parser_parse_type_expr(parser);
+      DA_APPEND(args, arg);
 
       if (parser_peek_token(*parser, 1).kind != TokenKindCParen)
         parser_expect_token(parser, TokenKindComma);
     }
 
     parser_next_token(parser);
+    token = parser_expect_token(parser, TokenKindOp | TokenKindColon);
+  }
+
+  if (token.kind == TokenKindColon) {
+    has_type = true;
+    type = parser_parse_type_expr(parser);
     token = parser_expect_token(parser, TokenKindOp);
   }
 
@@ -324,17 +370,20 @@ static Expr parser_parse_let(Parser *parser) {
 
   Expr expr;
 
-  if (func) {
+  if (is_func) {
     expr.kind = ExprKindFunc;
     expr.as.func = aalloc(sizeof(ExprFunc));
     expr.as.func->name = name.str;
     expr.as.func->args = args;
     expr.as.func->body = value;
+    expr.as.func->result_type = type;
   } else {
     expr.kind = ExprKindVar;
     expr.as.var = aalloc(sizeof(ExprVar));
     expr.as.var->name = name.str;
     expr.as.var->value = value;
+    expr.as.var->has_type = has_type;
+    expr.as.var->type = type;
   }
 
   return expr;

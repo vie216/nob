@@ -4,6 +4,32 @@
 #include "str.h"
 
 typedef enum {
+  TypeExprKindIdent = 0,
+  TypeExprKindPtr,
+} TypeExprKind;
+
+typedef struct TypeExprIdent TypeExprIdent;
+typedef struct TypeExprPtr   TypeExprPtr;
+
+typedef union {
+  TypeExprIdent *ident;
+  TypeExprPtr   *ptr;
+} TypeExprAs;
+
+typedef struct {
+  TypeExprKind kind;
+  TypeExprAs   as;
+} TypeExpr;
+
+struct TypeExprIdent {
+  Str ident;
+};
+
+struct TypeExprPtr {
+  TypeExpr points_to;
+};
+
+typedef enum {
   ExprKindLit = 0,
   ExprKindBlock,
   ExprKindIdent,
@@ -23,8 +49,6 @@ typedef struct ExprFunc  ExprFunc;
 typedef struct ExprIf    ExprIf;
 typedef struct ExprWhile ExprWhile;
 
-typedef struct Def Def;
-
 typedef union {
   ExprLit   *lit;
   ExprBlock *block;
@@ -40,6 +64,8 @@ typedef struct {
   ExprKind kind;
   ExprAs   as;
 } Expr;
+
+typedef struct Def Def;
 
 typedef enum {
   LitKindInt = 0,
@@ -67,21 +93,29 @@ struct ExprCall {
 };
 
 struct ExprVar {
-  Str  name;
-  Expr value;
-  Def *def;
+  Str       name;
+  Expr      value;
+  bool      has_type;
+  TypeExpr  type;
+  Def      *def;
 };
 
 typedef struct {
-  Str *items;
+  Str      name;
+  TypeExpr type;
+} Arg;
+
+typedef struct {
+  Arg *items;
   i32  len, cap;
 } Args;
 
 struct ExprFunc {
-  Str  name;
-  Args args;
-  Expr body;
-  Def *def;
+  Str       name;
+  Args      args;
+  Expr      body;
+  TypeExpr  result_type;
+  Def      *def;
 };
 
 struct ExprIf {
