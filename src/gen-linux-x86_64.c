@@ -105,18 +105,7 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
 
     return target_loc;
   } else if (str_eq(name, STR_LIT("asm"))) {
-    if (args->len != 1) {
-      ERROR("`asm` intrinsic takes exactly one argument, ");
-      fprintf(stderr, "%d were given\n", args->len);
-      exit(1);
-    }
-
     Expr arg = args->items[0];
-
-    if (arg.kind != ExprKindLit || arg.as.lit->kind != LitKindStr) {
-      ERROR("Argument of `asm` intrinsic should be a string literal\n");
-      exit(1);
-    }
 
     arg.as.lit->lit.ptr += 1;
     arg.as.lit->lit.len -= 2;
@@ -238,7 +227,7 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
 }
 
 static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
-  gen->ctx.stack_pointer += var->def->size;
+  gen->ctx.stack_pointer += 8;//type_size(var->def->type);
 
   StringBuilder sb = {0};
   sb_push(&sb, "qword [rsp+");
@@ -372,7 +361,7 @@ Str gen_linux_x86_64(Metadata meta) {
   for (i32 i = 0; i < meta.funcs.len; ++i) {
     Func func = meta.funcs.items[i];
 
-    if (func.args_count > (i32) ARRAY_LEN(arg_reg_names)) {
+    if (func.arity > (i32) ARRAY_LEN(arg_reg_names)) {
       ERROR("Exceeded amount of registers for function arguments");
       INFO("TODO: use stack when this happens");
       exit(1);
@@ -381,8 +370,8 @@ Str gen_linux_x86_64(Metadata meta) {
     func.expr->def->loc = func.expr->def->name;
 
     Def *arg_def = func.arg_defs;
-    for (i32 i = 0; i < func.args_count; ++i) {
-      arg_def->loc = arg_reg_names[func.args_count - i - 1];
+    for (i32 i = 0; i < func.arity; ++i) {
+      arg_def->loc = arg_reg_names[func.arity - i - 1];
       arg_def = arg_def->next;
     }
   }
@@ -444,22 +433,4 @@ Str gen_linux_x86_64(Metadata meta) {
   }
 
   return sb_to_str(&sb);
-}
-
-Def *intrinsic_defs_linux_x86_64(void) {
-  Def *defs = NULL;
-
-  static Str intrinsics[] = {
-    STR_LIT("+"), STR_LIT("-"), STR_LIT("*"),
-    STR_LIT("/"), STR_LIT("%"), STR_LIT("asm"),
-  };
-
-  for (i32 i = 0; i < (i32) ARRAY_LEN(intrinsics); ++i) {
-    LL_APPEND(defs, Def);
-    defs->name = intrinsics[i];
-    defs->size = 8;
-    defs->is_intrinsic = true;
-  }
-
-  return defs;
 }

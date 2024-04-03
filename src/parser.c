@@ -291,12 +291,12 @@ static TypeExpr parser_parse_type_expr(Parser *parser) {
   Token token = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
   if (token.kind == TokenKindIdent) {
     TypeExprIdent *ident = aalloc(sizeof(TypeExprIdent));
-    ident->ident = parser_expect_token(parser, TokenKindIdent).str;
+    ident->ident = token.str;
     return (TypeExpr) {
       .kind = TypeExprKindIdent,
       .as = { .ident = ident },
     };
-  } else {
+  } else if (token.kind == TokenKindOp) {
     if (!str_eq(token.str, STR_LIT("&"))) {
       PERROR("%s:%d:%d: ", "Unexpected ",
              parser->file_path, token.row, token.col);
@@ -312,6 +312,9 @@ static TypeExpr parser_parse_type_expr(Parser *parser) {
       .as = { .ptr = ptr },
     };
   }
+
+  ERROR("Unreachable\n");
+  exit(1);
 }
 
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence);

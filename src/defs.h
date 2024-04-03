@@ -27,6 +27,16 @@
     ll = new;                         \
   } while(0)
 
+#define LL_PREPEND(ll, ll_end, type)  \
+  do {                                \
+    type *new = aalloc(sizeof(type)); \
+    if (ll_end)                       \
+      ll_end->next = new;             \
+    else                              \
+      ll = new;                       \
+    ll_end = new;                     \
+  } while(0)
+
 typedef char           i8;
 typedef unsigned char  u8;
 typedef short          i16;
@@ -42,5 +52,7 @@ typedef u8 bool;
 
 #define false 0
 #define true  1
+
+#include "arena.h"
 
 #endif // DEFS_H

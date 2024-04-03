@@ -7,6 +7,8 @@
 
 #define STR(ptr, len) ((Str) { ptr, len })
 #define STR_LIT(ptr) ((Str) { ptr, sizeof(ptr) - 1 })
+#define STR_FMT "%.*s"
+#define STR_ARG(str) str.len, str.ptr
 
 typedef struct {
   char *ptr;

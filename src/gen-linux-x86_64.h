@@ -1,7 +1,7 @@
 #ifndef GEN_H
 #define GEN_H
 
-#include "checker.h"
+#include "type.h"
 
 typedef struct {
   Str *items;
@@ -24,6 +24,5 @@ typedef struct {
 } Generator;
 
 Str gen_linux_x86_64(Metadata meta);
-Def *intrinsic_defs_linux_x86_64(void);
 
 #endif // GEN_H

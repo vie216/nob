@@ -6,7 +6,7 @@
 #include "str.h"
 #include "log.h"
 #include "parser.h"
-#include "checker.h"
+#include "type.h"
 #include "gen-linux-x86_64.h"
 
 void parse_args(int argc, char **argv,
@@ -95,6 +95,77 @@ void assemble(char *asm_path) {
     exit(1);
 }
 
+Def *intrinsic_defs(void) {
+  Def *defs = NULL;
+  Def *arg_defs = NULL;
+  Def *arg_defs_end = NULL;
+
+  LL_PREPEND(arg_defs, arg_defs_end, Def);
+  LL_PREPEND(arg_defs, arg_defs_end, Def);
+
+  TypeInt *eent = aalloc(sizeof(TypeInt));
+  eent->kind = IntKindS64;
+  arg_defs->type = (Type) { TypeKindInt, { .eent = eent } };
+
+  eent = aalloc(sizeof(TypeInt));
+  eent->kind = IntKindS64;
+  arg_defs_end->type = (Type) { TypeKindInt, { .eent = eent } };
+
+  TypeFunc *func = aalloc(sizeof(TypeFunc));
+  eent = aalloc(sizeof(TypeInt));
+  eent->kind = IntKindS64;
+  func->result_type = (Type) { TypeKindInt, { .eent = eent } };
+  func->arg_defs = arg_defs;
+  func->arity = 2;
+  Type bin_op = { TypeKindFunc, { .func = func } };
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("+");
+  defs->type = bin_op;
+  defs->is_intrinsic = true;
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("-");
+  defs->type = bin_op;
+  defs->is_intrinsic = true;
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("*");
+  defs->type = bin_op;
+  defs->is_intrinsic = true;
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("/");
+  defs->type = bin_op;
+  defs->is_intrinsic = true;
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("%");
+  defs->type = bin_op;
+  defs->is_intrinsic = true;
+
+  arg_defs = aalloc(sizeof(Def));
+  TypePtr *ptr = aalloc(sizeof(TypePtr));
+  eent = aalloc(sizeof(TypeInt));
+  eent->kind = IntKindU8;
+  ptr->points_to = (Type) { TypeKindInt, { .eent = eent } };
+  ptr->is_str_lit = true;
+  arg_defs->type = (Type) { TypeKindPtr, { .ptr = ptr } };
+
+  func = aalloc(sizeof(TypeFunc));
+  func->result_type = (Type) { TypeKindUnit };
+  func->arg_defs = arg_defs;
+  func->arity = 1;
+  Type _asm = { TypeKindFunc, { .func = func } };
+
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("asm");
+  defs->type = _asm;
+  defs->is_intrinsic = true;
+
+  return defs;
+}
+
 int main(int argc, char **argv) {
   char *input_path, *output_path;
   parse_args(argc, argv, &input_path, &output_path);
@@ -103,7 +174,7 @@ int main(int argc, char **argv) {
   INFO("Parsing\n");
   Expr program = parse_program(source_code, input_path);
   INFO("Type checking\n");
-  Metadata meta = add_metadata(program, intrinsic_defs_linux_x86_64());
+  Metadata meta = type_check(program, intrinsic_defs());
   INFO("Compiling\n");
   Str _asm = gen_linux_x86_64(meta);
   INFO("Assembling\n");
