@@ -116,6 +116,7 @@ struct ExprFunc {
   Expr      body;
   TypeExpr  result_type;
   Def      *def;
+  i32       func_index;
 };
 
 struct ExprIf {

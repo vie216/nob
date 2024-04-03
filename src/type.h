@@ -46,10 +46,10 @@ struct TypeFunc {
 };
 
 struct Def {
-  Str  name, loc;
-  Type type;
-  bool is_intrinsic;
-  Def *next;
+  Str   name, loc;
+  Type  type;
+  bool  is_intrinsic;
+  Def  *next;
 };
 
 typedef struct {

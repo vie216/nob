@@ -221,6 +221,7 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
       return;
     }
 
+    expr.as.func->func_index = checker->funcs.len;
     expr.as.func->def = aalloc(sizeof(Def));
     expr.as.func->def->name = expr.as.func->name;
     expr.as.func->def->type = type;
@@ -361,7 +362,7 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
       checker->found_main = true;
 
     Def *prev_defs = checker->defs;
-    checker->defs = NULL;
+    checker->defs = checker->funcs.items[expr.as.func->func_index].arg_defs;
 
     Type func_type = expr.as.func->def->type;
     Type result_type = func_type.as.func->result_type;
