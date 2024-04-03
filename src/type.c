@@ -12,10 +12,6 @@ typedef struct {
 } Checker;
 
 static bool type_eq(Type a, Type b) {
-  if (a.kind == TypeKindError ||
-      b.kind == TypeKindError)
-    return true;
-
   if (a.kind != b.kind)
     return false;
 
@@ -33,7 +29,7 @@ static bool type_eq(Type a, Type b) {
     bool b_is_str_lit = b.as.ptr->is_str_lit;
 
     return type_eq(a.as.ptr->points_to, b.as.ptr->points_to) &&
-           (a_is_str_lit || a_is_str_lit == b_is_str_lit);
+           (a_is_str_lit || !b_is_str_lit);
   }
 
   case TypeKindFunc: {
@@ -53,8 +49,6 @@ static bool type_eq(Type a, Type b) {
 
     return true;
   }
-
-  case TypeKindError: break;
   }
 
   ERROR("Unreachable\n");
@@ -83,6 +77,7 @@ static Type type_from_type_expr(TypeExpr expr) {
   case TypeExprKindPtr: {
     TypePtr *ptr = aalloc(sizeof(TypePtr));
     ptr->points_to = type_from_type_expr(expr.as.ptr->points_to);
+    ptr->is_str_lit = false;
     return (Type) { TypeKindPtr, { .ptr = ptr } };
   }
   }
@@ -260,6 +255,7 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
     for (i32 i = 0; i < expr.as.block->len; ++i)
       checker_collect_funcs(checker, expr.as.block->items[i]);
+
     for (i32 i = 0; i + 1 < expr.as.block->len; ++i)
       checker_type_check_expr(checker, expr.as.block->items[i]);
 
@@ -300,7 +296,7 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
       ERROR("Undeclared identifier: `"STR_FMT"`\n",
             STR_ARG(expr.as.ident->ident));
       checker->has_error = true;
-      return (Type) { TypeKindError, {0} };
+      return (Type) { TypeKindUnit, {0} };
     }
 
     return expr.as.ident->def->type;
@@ -308,6 +304,8 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
   case ExprKindVar: {
     Type value_type = checker_type_check_expr(checker, expr.as.var->value);
+    if (value_type.kind == TypeKindPtr)
+      value_type.as.ptr->is_str_lit = false;
 
     if (expr.as.var->has_type) {
       Type var_type = type_from_type_expr(expr.as.var->type);
@@ -369,8 +367,7 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
     Type result_type = func_type.as.func->result_type;
 
     Type body_type = checker_type_check_expr(checker, expr.as.func->body);
-    if (result_type.kind != TypeKindUnit &&
-        !type_eq(body_type, result_type)) {
+    if (result_type.kind != TypeKindUnit && !type_eq(body_type, result_type)) {
       ERROR("Unexpected function return type\n");
       INFO("TODO: type printing\n");
       checker->has_error = true;

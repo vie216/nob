@@ -8,7 +8,6 @@ typedef enum {
   TypeKindInt,
   TypeKindPtr,
   TypeKindFunc,
-  TypeKindError,
 } TypeKind;
 
 typedef struct TypeInt  TypeInt;
