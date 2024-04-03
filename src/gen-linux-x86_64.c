@@ -142,18 +142,18 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
     return target.str;
   } else if (lit->kind == LitKindStr) {
     StringBuilder sb = {0};
-    sb_push(&sb, "db_");
+    sb_push(&sb, "db");
     sb_push_i32(&sb, gen->strings.len);
     Str db_name = sb_to_str(&sb);
-
-    if (!target.strict)
-      return db_name;
 
     Str db = {
       .ptr = lit->lit.ptr + 1,
       .len = lit->lit.len - 2,
     };
     DA_APPEND(gen->strings, db);
+
+    if (!target.strict)
+      return db_name;
 
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, target.str);
@@ -421,7 +421,7 @@ Str gen_linux_x86_64(Metadata meta) {
   if (gen.strings.len > 0)
     sb_push(&sb, "segment readable\n");
   for (i32 i = 0; i < gen.strings.len; ++i) {
-    sb_push(&sb, "db_");
+    sb_push(&sb, "db");
     sb_push_i32(&sb, i);
     sb_push(&sb, ": db ");
     for (i32 j = 0; j < gen.strings.items[i].len; ++j) {
