@@ -1,1 +1,4 @@
-Type system
+Preserve function arguments on subcalls
+Add more intrinsics
+Look up functions by argument types and count
+Take types size and signedness into account on code generation stage
