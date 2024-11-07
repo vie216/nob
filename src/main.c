@@ -41,7 +41,7 @@ void parse_args(int argc, char **argv,
   }
 
   if (!*input_path) {
-    ERROR("Input file is not provided\n");
+    ERROR("Input file was not provided\n");
     exit(1);
   }
 }

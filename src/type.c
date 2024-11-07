@@ -7,6 +7,8 @@ typedef struct {
   Def   *defs;
   Def   *intrinsic_defs;
   Funcs  funcs;
+  Type   current_func_result_type;
+  bool   inside_of_func;
   bool   has_error;
   bool   found_main;
 } Checker;
@@ -121,6 +123,11 @@ static i32 expr_scope_size(Expr expr) {
   case ExprKindWhile: {
     expr_scope_size(expr.as.whail->cond);
     expr_scope_size(expr.as.whail->body);
+  } break;
+
+  case ExprKindRet: {
+    if (expr.as.ret->has_result)
+      expr_scope_size(expr.as.ret->result);
   } break;
   }
 
@@ -246,6 +253,10 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
     checker_collect_funcs(checker, expr.as.whail->cond);
     checker_collect_funcs(checker, expr.as.whail->body);
   } break;
+
+  case ExprKindRet: {
+    checker_collect_funcs(checker, expr.as.ret->result);
+  } break;
   }
 }
 
@@ -367,12 +378,20 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
     Type func_type = expr.as.func->def->type;
     Type result_type = func_type.as.func->result_type;
 
+    Type prev_func_result_type = checker->current_func_result_type;
+    bool prev_inside_of_func = checker->inside_of_func;
+    checker->current_func_result_type = result_type;
+    checker->inside_of_func = true;
+
     Type body_type = checker_type_check_expr(checker, expr.as.func->body);
     if (result_type.kind != TypeKindUnit && !type_eq(body_type, result_type)) {
       ERROR("Unexpected function return type\n");
       INFO("TODO: type printing\n");
       checker->has_error = true;
     }
+
+    checker->inside_of_func = prev_inside_of_func;
+    checker->current_func_result_type = prev_func_result_type;
 
     checker->defs = prev_defs;
 
@@ -414,6 +433,25 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
     return (Type) { TypeKindUnit };
   } break;
+
+  case ExprKindRet: {
+    if (!checker->inside_of_func) {
+      ERROR("Could not return: not inside of a function\n");
+      checker->has_error = true;
+    }
+
+    Type result_type = { TypeKindUnit };
+    if (expr.as.ret->has_result)
+      checker_type_check_expr(checker, expr.as.ret->result);
+
+    if (!type_eq(result_type, checker->current_func_result_type)) {
+      ERROR("Different function type and return type\n");
+      INFO("TODO: type printing\n");
+      checker->has_error = true;
+    }
+
+    return result_type;
+  } break;
   }
 
   ERROR("Unreachable\n");
@@ -423,6 +461,8 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 Metadata type_check(Expr program, Def *intrinsic_defs) {
   Checker checker = {
     .intrinsic_defs = intrinsic_defs,
+    .current_func_result_type = { TypeKindUnit },
+    .inside_of_func = false,
   };
 
   checker_type_check_expr(&checker, program);

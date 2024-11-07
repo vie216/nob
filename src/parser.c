@@ -21,7 +21,8 @@ typedef enum {
   TokenKindElse   = 1 << 12,
   TokenKindElif   = 1 << 13,
   TokenKindWhile  = 1 << 14,
-  TokenKindCount  = 15,
+  TokenKindRet    = 1 << 15,
+  TokenKindCount  = 16,
 } TokenKind;
 
 typedef struct {
@@ -142,7 +143,7 @@ static Token parser_next_token(Parser *parser) {
   TokenKind kind = TokenKindNone;
   char *start = parser->current++;
 
-  _Static_assert (TokenKindCount == 15, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 16, "All token kinds should be handled here.");
   if (isdigit(*start)) {
     kind = TokenKindIntLit;
     while (!parser_eof(parser) && isdigit(*parser->current))
@@ -165,13 +166,14 @@ static Token parser_next_token(Parser *parser) {
       i32 token_kind;
     };
 
-    _Static_assert (TokenKindCount == 15, "Maybe new keyword was added? Then update this place.");
+    _Static_assert (TokenKindCount == 16, "Maybe new keyword was added? Then update this place.");
     static struct Keyword keywords[] = {
-      { STR_LIT("let"), TokenKindLet },
-      { STR_LIT("if"), TokenKindIf },
-      { STR_LIT("else"), TokenKindElse },
-      { STR_LIT("elif"), TokenKindElif },
+      { STR_LIT("let"),   TokenKindLet },
+      { STR_LIT("if"),    TokenKindIf },
+      { STR_LIT("else"),  TokenKindElse },
+      { STR_LIT("elif"),  TokenKindElif },
       { STR_LIT("while"), TokenKindWhile },
+      { STR_LIT("ret"),   TokenKindRet },
     };
 
     for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i) {
@@ -241,11 +243,11 @@ static void print_token_kind(TokenKind token_kind) {
   char *prev_str = NULL;
   bool printed = false;
 
-  _Static_assert (TokenKindCount == 15, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 16, "All token kinds should be handled here.");
   static char *token_kind_names[TokenKindCount] = {
     "end of file", "integer", "string", "operator", "semicolon",
     "identifier", "left paren", "right paren", "comma", "colon",
-    "let", "if", "else", "elif", "while",
+    "let", "if", "else", "elif", "while", "ret",
   };
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
@@ -431,6 +433,18 @@ static Expr parser_parse_while(Parser *parser) {
   return whail;
 }
 
+static Expr parser_parse_ret(Parser *parser) {
+  Expr ret;
+
+  ret.kind = ExprKindRet;
+  ret.as.ret = aalloc(sizeof(ExprRet));
+  ret.as.ret->has_result = parser_peek_token(*parser, 0).kind != TokenKindSemi;
+  if (ret.as.ret->has_result)
+    ret.as.ret->result = parser_parse_expr(parser, 0);
+
+  return ret;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_peek_token(*parser, 1);
@@ -458,8 +472,9 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindIntLit | TokenKindIdent |
                               TokenKindOParen | TokenKindStrLit |
                               TokenKindLet | TokenKindIf |
-                              TokenKindWhile);
+                              TokenKindWhile | TokenKindRet);
 
+  _Static_assert(TokenKindCount == 16, "All token kinds should be handled here.");
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
     lhs.as.lit = aalloc(sizeof(ExprLit));
@@ -487,6 +502,8 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs = parser_parse_if(parser);
   } else if (token.kind == TokenKindWhile) {
     lhs = parser_parse_while(parser);
+  } else if (token.kind == TokenKindRet) {
+    lhs = parser_parse_ret(parser);
   }
 
   if (parser_peek_token(*parser, 1).kind == TokenKindOParen) {

@@ -1,9 +1,11 @@
-let main() = func()
+let main() = func0(0)
 
-let func() = (
+let func0(s: s64) = (
   let x: s64 = 5
   let y: s64 = x + 6
 
   if 1: y / 5
   else: y % 5
 )
+
+let func1(s: s64) = s

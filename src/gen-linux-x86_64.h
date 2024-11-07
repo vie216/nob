@@ -9,10 +9,10 @@ typedef struct {
 } Strings;
 
 typedef struct {
-  i32 scope_size;
-  i32 stack_pointer;
-  i32 max_regs_used;
-  i32 max_arg_regs_used;
+  Func *func;
+  i32   stack_pointer;
+  i32   max_regs_used;
+  i32   max_arg_regs_used;
 } FuncCtx;
 
 typedef struct {

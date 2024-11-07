@@ -38,6 +38,7 @@ typedef enum {
   ExprKindFunc,
   ExprKindIf,
   ExprKindWhile,
+  ExprKindRet,
 } ExprKind;
 
 typedef struct ExprLit   ExprLit;
@@ -48,6 +49,7 @@ typedef struct ExprVar   ExprVar;
 typedef struct ExprFunc  ExprFunc;
 typedef struct ExprIf    ExprIf;
 typedef struct ExprWhile ExprWhile;
+typedef struct ExprRet   ExprRet;
 
 typedef union {
   ExprLit   *lit;
@@ -58,6 +60,7 @@ typedef union {
   ExprFunc  *func;
   ExprIf    *eef;
   ExprWhile *whail;
+  ExprRet   *ret;
 } ExprAs;
 
 typedef struct {
@@ -129,6 +132,11 @@ struct ExprIf {
 struct ExprWhile {
   Expr cond;
   Expr body;
+};
+
+struct ExprRet {
+  Expr result;
+  bool has_result;
 };
 
 Expr parse_program(Str source, char *file_path);
