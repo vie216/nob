@@ -366,7 +366,7 @@ static Str gen_ret_linux_x86_64(Generator *gen, ExprRet *ret, Target target) {
     sb_push(&gen->sb, "\n");
   }
 
-  for (i32 i = gen->ctx.max_regs_used - 1; i >= 0; --i) {
+  for (i32 i = gen->ctx.max_regs_used - 2; i >= 0; --i) {
     sb_push(&gen->sb, "\tpop ");
     sb_push_str(&gen->sb, reg_names[i]);
     sb_push(&gen->sb, "\n");
@@ -425,7 +425,7 @@ switch (expr.kind) {
       if (expr.as.call->args->len > regs_used->max_arg_regs_used)
         regs_used->max_arg_regs_used = expr.as.call->args->len;
 
-      for (i32 i = 0; i < expr.as.call->args->len && i < regs_used->func->arity; ++i)
+      for (i32 i = 0; i + 1 < expr.as.call->args->len && i + 1 < regs_used->func->arity; ++i)
         regs_used_use_reg(regs_used);
 
       regs_used_count_in_expr(regs_used, expr.as.call->func, true);
