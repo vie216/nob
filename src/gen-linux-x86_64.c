@@ -63,12 +63,12 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     else
       sb_push(&gen->sb, "\timul ");
     sb_push_str(&gen->sb, lhs);
-    sb_push(&gen->sb, ", ");
+    sb_push(&gen->sb, ",");
     sb_push_str(&gen->sb, rhs);
     sb_push(&gen->sb, "\n");
 
     if (preserve_rax_on_rhs_call) {
-      sb_push(&gen->sb, "\tmov rax, ");
+      sb_push(&gen->sb, "\tmov rax,");
       sb_push_str(&gen->sb, lhs_loc);
       sb_push(&gen->sb, "\n");
     }
@@ -87,7 +87,7 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     gen->regs_used -= 1 + preserve_rax_on_rhs_call;
 
     if (preserve_rax_on_rhs_call) {
-      sb_push(&gen->sb, "\tmov rax, ");
+      sb_push(&gen->sb, "\tmov rax,");
       sb_push_str(&gen->sb, lhs_loc);
       sb_push(&gen->sb, "\n");
     }
@@ -102,7 +102,7 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     if (target.strict && !str_eq(target.str, target_loc)) {
       sb_push(&gen->sb, "\tmov ");
       sb_push_str(&gen->sb, target.str);
-      sb_push(&gen->sb, ", ");
+      sb_push(&gen->sb, ",");
       sb_push_str(&gen->sb, target_loc);
       sb_push(&gen->sb, "\n");
 
@@ -134,13 +134,13 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
     if (str_eq(lit->lit, STR_LIT("0"))) {
       sb_push(&gen->sb, "\txor ");
       sb_push_str(&gen->sb, target.str);
-      sb_push(&gen->sb, ", ");
+      sb_push(&gen->sb, ",");
       sb_push_str(&gen->sb, target.str);
       sb_push(&gen->sb, "\n");
     } else {
       sb_push(&gen->sb, "\tmov ");
       sb_push_str(&gen->sb, target.str);
-      sb_push(&gen->sb, ", ");
+      sb_push(&gen->sb, ",");
       sb_push_str(&gen->sb, lit->lit);
       sb_push(&gen->sb, "\n");
     }
@@ -163,7 +163,7 @@ static Str gen_lit_linux_x86_64(Generator *gen, ExprLit *lit, Target target) {
 
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, target.str);
-    sb_push(&gen->sb, ", ");
+    sb_push(&gen->sb, ",");
     sb_push_str(&gen->sb, db_name);
     sb_push(&gen->sb, "\n");
 
@@ -192,7 +192,7 @@ static Str gen_ident_linux_x86_64(Generator *gen, ExprIdent *ident, Target targe
 
   sb_push(&gen->sb, "\tmov ");
   sb_push_str(&gen->sb, target.str);
-  sb_push(&gen->sb, ", ");
+  sb_push(&gen->sb, ",");
   sb_push_str(&gen->sb, ident->def->loc);
   sb_push(&gen->sb, "\n");
 
@@ -215,7 +215,7 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
   for (i32 i = 0; i < call->args->len && i < gen->ctx.func->arity; ++i) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, reg_names[gen->regs_used++]);
-    sb_push(&gen->sb, ", ");
+    sb_push(&gen->sb, ",");
     sb_push_str(&gen->sb, arg_reg_names[i]);
     sb_push(&gen->sb, "\n");
   }
@@ -232,13 +232,13 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
   if (target.strict && !str_eq(target.str, STR_LIT("rax"))) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, target.str);
-    sb_push(&gen->sb, ", rax\n");
+    sb_push(&gen->sb, ",rax\n");
   }
 
   for (i32 i = 0; i < call->args->len && i < gen->ctx.func->arity; ++i) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, arg_reg_names[i]);
-    sb_push(&gen->sb, ", ");
+    sb_push(&gen->sb, ",");
     sb_push_str(&gen->sb, reg_names[--gen->regs_used]);
     sb_push(&gen->sb, "\n");
   }
@@ -265,7 +265,7 @@ static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
   if (!str_eq(value, var->def->loc)) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, var->def->loc);
-    sb_push(&gen->sb, ", ");
+    sb_push(&gen->sb, ",");
     sb_push_str(&gen->sb, value);
     sb_push(&gen->sb, "\n");
   }
@@ -279,7 +279,7 @@ static Str gen_func_linux_x86_64(Generator *gen, ExprFunc *func, Target target) 
 
   sb_push(&gen->sb, "\tmov ");
   sb_push_str(&gen->sb, target.str);
-  sb_push(&gen->sb, ", ");
+  sb_push(&gen->sb, ",");
   sb_push_str(&gen->sb, func->def->loc);
   sb_push(&gen->sb, "\n");
 
@@ -293,7 +293,7 @@ static Str gen_if_linux_x86_64(Generator *gen, ExprIf *eef, Target target) {
 
   sb_push(&gen->sb, "\tcmp ");
   sb_push_str(&gen->sb, cond);
-  sb_push(&gen->sb, ", 0\n");
+  sb_push(&gen->sb, ",0\n");
   sb_push(&gen->sb, "\tje .l");
   sb_push_i32(&gen->sb, else_id);
   sb_push(&gen->sb, "\n");
@@ -333,7 +333,7 @@ static Str gen_while_linux_x86_64(Generator *gen, ExprWhile *whail, Target targe
 
   sb_push(&gen->sb, "\tcmp ");
   sb_push_str(&gen->sb, cond);
-  sb_push(&gen->sb, ", 0\n");
+  sb_push(&gen->sb, ",0\n");
   sb_push(&gen->sb, "\tje .l");
   sb_push_i32(&gen->sb, next_id);
   sb_push(&gen->sb, "\n");
@@ -355,13 +355,13 @@ static Str gen_ret_linux_x86_64(Generator *gen, ExprRet *ret, Target target) {
   Str result = gen_expr_linux_x86_64(gen, ret->result, target);
 
   if (!str_eq(result, STR_LIT("rax"))) {
-    sb_push(&gen->sb, "\tmov rax, ");
+    sb_push(&gen->sb, "\tmov rax,");
     sb_push_str(&gen->sb, result);
     sb_push(&gen->sb, "\n");
   }
 
   if (gen->ctx.func->scope_size != 0) {
-    sb_push(&gen->sb, "\tadd rsp, ");
+    sb_push(&gen->sb, "\tadd rsp,");
     sb_push_i32(&gen->sb, gen->ctx.func->scope_size);
     sb_push(&gen->sb, "\n");
   }
@@ -477,8 +477,8 @@ Str gen_linux_x86_64(Metadata meta) {
   sb_push(&sb, "entry _start\n");
   sb_push(&sb, "_start:\n");
   sb_push(&sb, "\tcall main\n");
-  sb_push(&sb, "\tmov rdi, rax\n");
-  sb_push(&sb, "\tmov rax, 60\n");
+  sb_push(&sb, "\tmov rdi,rax\n");
+  sb_push(&sb, "\tmov rax,60\n");
   sb_push(&sb, "\tsyscall\n");
 
   for (i32 i = 0; i < meta.funcs.len; ++i) {
@@ -524,7 +524,7 @@ Str gen_linux_x86_64(Metadata meta) {
     }
 
     if (func.scope_size != 0) {
-      sb_push(&sb, "\tsub rsp, ");
+      sb_push(&sb, "\tsub rsp,");
       sb_push_i32(&sb, func.scope_size);
       sb_push(&sb, "\n");
     }
@@ -532,7 +532,7 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push_str(&sb, sb_to_str(&gen.sb));
 
     if (func.scope_size != 0) {
-      sb_push(&sb, "\tadd rsp, ");
+      sb_push(&sb, "\tadd rsp,");
       sb_push_i32(&sb, func.scope_size);
       sb_push(&sb, "\n");
     }
