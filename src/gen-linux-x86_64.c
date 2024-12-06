@@ -20,8 +20,6 @@ typedef struct {
   i32   regs_used;
   i32   max_arg_regs_used;
   i32   arg_regs_used;
-  i32   stack_used;
-  i32   max_stack_used;
 } MemUsed;
 
 static Str reg_names[] = { STR_LIT("rbx"), STR_LIT("r12"), STR_LIT("r13"),
@@ -38,13 +36,6 @@ static void mem_used_use_reg(MemUsed *mem_used) {
 
   if (++mem_used->regs_used > mem_used->max_regs_used)
     mem_used->max_regs_used = mem_used->regs_used;
-}
-
-static void mem_used_use_stack(MemUsed *mem_used, i32 amount) {
-  mem_used->stack_used += amount;
-
-  if (++mem_used->stack_used > mem_used->max_stack_used)
-    mem_used->max_stack_used = mem_used->stack_used;
 }
 
 static Str gen_stack_alloc(Generator *gen, i32 amount) {
@@ -568,20 +559,13 @@ static void mem_used_count_in_expr(MemUsed *mem_used, Expr expr, bool target_is_
       if (args_count > mem_used->func->arity)
         args_count = mem_used->func->arity;
 
-      for (i32 i = 0; i + 1 < args_count; ++i)
-        mem_used_use_stack(mem_used, 8);
-
       for (i32 i = 0; i < expr.as.call->args->len; ++i)
         mem_used_count_in_expr(mem_used, expr.as.call->args->items[i], false);
-
-      mem_used->stack_used -= args_count * 8;
     }
   } break;
 
   case ExprKindVar: {
-    mem_used_use_stack(mem_used, 8);
     mem_used_count_in_expr(mem_used, expr.as.var->value, target_is_return);
-    mem_used->stack_used -= 8;
   } break;
 
   case ExprKindFunc: break;
@@ -659,7 +643,6 @@ Str gen_linux_x86_64(Metadata meta) {
       .func = &func,
       .max_regs_used = mem_used.max_regs_used,
       .max_arg_regs_used = mem_used.max_arg_regs_used,
-      .max_stack_used = mem_used.max_stack_used,
     };
 
     Def *arg_def = func.arg_defs;

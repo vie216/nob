@@ -20,10 +20,8 @@ typedef struct {
 
 typedef struct {
   Func *func;
-  i32   stack_pointer;
   i32   max_regs_used;
   i32   max_arg_regs_used;
-  i32   max_stack_used;
 } FuncCtx;
 
 typedef struct {
