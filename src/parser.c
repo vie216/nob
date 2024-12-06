@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "parser.h"
 #include "log.h"
 #include "arena.h"
+#include "io.h"
 
 typedef enum {
   TokenKindNone   = 1 << 0,
@@ -25,7 +27,8 @@ typedef enum {
   TokenKindAsm    = 1 << 16,
   TokenKindOSqr   = 1 << 17,
   TokenKindCSqr   = 1 << 18,
-  TokenKindCount  = 19,
+  TokenKindMod    = 1 << 19,
+  TokenKindCount  = 20,
 } TokenKind;
 
 typedef struct {
@@ -154,7 +157,7 @@ static Token parser_next_token(Parser *parser) {
   TokenKind kind = TokenKindNone;
   char *start = parser->current++;
 
-  _Static_assert (TokenKindCount == 19, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 20, "All token kinds should be handled here.");
   if (isdigit(*start)) {
     kind = TokenKindIntLit;
     while (!parser_eof(parser) && isdigit(*parser->current))
@@ -177,7 +180,7 @@ static Token parser_next_token(Parser *parser) {
       i32 token_kind;
     };
 
-    _Static_assert (TokenKindCount == 19, "Maybe new keyword was added? Then update this place.");
+    _Static_assert (TokenKindCount == 20, "Maybe new keyword was added? Then update this place.");
     static struct Keyword keywords[] = {
       { STR_LIT("let"),   TokenKindLet },
       { STR_LIT("if"),    TokenKindIf },
@@ -186,6 +189,7 @@ static Token parser_next_token(Parser *parser) {
       { STR_LIT("while"), TokenKindWhile },
       { STR_LIT("ret"),   TokenKindRet },
       { STR_LIT("asm"),   TokenKindAsm },
+      { STR_LIT("mod"),   TokenKindMod },
     };
 
     for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i) {
@@ -263,11 +267,11 @@ static void print_token_kind(TokenKind token_kind) {
   char *prev_str = NULL;
   bool printed = false;
 
-  _Static_assert (TokenKindCount == 19, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 20, "All token kinds should be handled here.");
   static char *token_kind_names[TokenKindCount] = {
     "end of file", "integer", "string", "operator", "semicolon",
     "identifier", "left paren", "right paren", "comma", "colon",
-    "let", "if", "else", "elif", "while", "ret", "asm",
+    "let", "if", "else", "elif", "while", "ret", "asm", "mod",
   };
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
@@ -487,6 +491,23 @@ static Expr parser_parse_asm(Parser *parser) {
   return _asm;
 }
 
+static Expr parser_parse_mod(Parser *parser) {
+  Token path_token = parser_expect_token(parser, TokenKindStrLit);
+
+  char *path = aalloc(path_token.str.len + 1);
+  memcpy(path, path_token.str.ptr, path_token.str.len);
+  path[path_token.str.len] = '\0';
+  Str content = read_file(path);
+  Expr program = parse_program(content, path);
+
+  Expr mod;
+  mod.kind = ExprKindMod;
+  mod.as.mod = aalloc(sizeof(ExprMod));
+  mod.as.mod->content = program.as.block;
+
+  return mod;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_peek_token(*parser, 1);
@@ -513,9 +534,9 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindOParen | TokenKindStrLit |
                               TokenKindLet | TokenKindIf |
                               TokenKindWhile | TokenKindRet |
-                              TokenKindAsm);
+                              TokenKindAsm | TokenKindMod);
 
-  _Static_assert(TokenKindCount == 19, "All token kinds should be handled here.");
+  _Static_assert(TokenKindCount == 20, "All token kinds should be handled here.");
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
     lhs.as.lit = aalloc(sizeof(ExprLit));
@@ -558,6 +579,8 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs = parser_parse_ret(parser);
   } else if (token.kind == TokenKindAsm) {
     lhs = parser_parse_asm(parser);
+  } else if (token.kind == TokenKindMod) {
+    lhs = parser_parse_mod(parser);
   }
 
   while (parser_peek_token(*parser, 1).kind == TokenKindOSqr) {

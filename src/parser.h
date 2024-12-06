@@ -42,6 +42,7 @@ typedef enum {
   ExprKindRet,
   ExprKindAsm,
   ExprKindDeref,
+  ExprKindMod,
 } ExprKind;
 
 typedef struct ExprLit   ExprLit;
@@ -55,6 +56,7 @@ typedef struct ExprWhile ExprWhile;
 typedef struct ExprRet   ExprRet;
 typedef struct ExprAsm   ExprAsm;
 typedef struct ExprDeref ExprDeref;
+typedef struct ExprMod   ExprMod;
 
 typedef union {
   ExprLit   *lit;
@@ -68,6 +70,7 @@ typedef union {
   ExprRet   *ret;
   ExprAsm   *_asm;
   ExprDeref *deref;
+  ExprMod   *mod;
 } ExprAs;
 
 typedef struct {
@@ -161,6 +164,10 @@ struct ExprAsm {
 struct ExprDeref {
   Expr body;
   Expr index;
+};
+
+struct ExprMod {
+  ExprBlock *content;
 };
 
 Expr parse_program(Str source, char *file_path);

@@ -1,0 +1,3 @@
+mod "nstd/io.nb"
+
+let main() = print("hi bruh\n")

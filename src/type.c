@@ -4,12 +4,12 @@
 #include "arena.h"
 
 typedef struct {
-  Def   *defs;
-  Funcs funcs;
-  Type  current_func_result_type;
-  bool  inside_of_func;
-  bool  has_error;
-  bool  found_main;
+  Def     *defs;
+  Funcs    funcs;
+  Type     current_func_result_type;
+  bool     inside_of_func;
+  bool     has_error;
+  bool     found_main;
 } Checker;
 
 static bool type_eq(Type a, Type b) {
@@ -169,6 +169,8 @@ static i32 expr_scope_size(Expr expr) {
     scope_size = expr_scope_size(expr.as.deref->body);
     scope_size += expr_scope_size(expr.as.deref->index);
   } break;
+
+  case ExprKindMod: break;
   }
 
   return scope_size;
@@ -286,6 +288,11 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
   case ExprKindDeref: {
     checker_collect_funcs(checker, expr.as.deref->body);
     checker_collect_funcs(checker, expr.as.deref->index);
+  } break;
+
+  case ExprKindMod: {
+    for (i32 i = 0; i < expr.as.mod->content->len; ++i)
+      checker_collect_funcs(checker, expr.as.mod->content->items[i]);
   } break;
   }
 }
@@ -537,6 +544,12 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
     return body_type.as.ptr->points_to;
   } break;
+
+  case ExprKindMod: {
+    for (i32 i = 0; i < expr.as.mod->content->len; ++i)
+      checker_type_check_expr(checker, expr.as.mod->content->items[i]);
+    return (Type) { TypeKindUnit };
+  };
   }
 
   ERROR("Unreachable\n");
@@ -553,7 +566,7 @@ Metadata type_check(Expr program, Def *intrinsic_defs) {
   checker_type_check_expr(&checker, program);
 
   if (!checker.found_main) {
-    ERROR("Function `main` is required\n");
+    ERROR("Function `main` required\n");
     checker.has_error = true;
   }
 
@@ -566,7 +579,7 @@ Metadata type_check(Expr program, Def *intrinsic_defs) {
   }
 
   return (Metadata) {
-    .funcs = checker.funcs,
     .defs = checker.defs,
+    .funcs = checker.funcs,
   };
 }

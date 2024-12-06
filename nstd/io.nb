@@ -1,0 +1,16 @@
+let print(text: &s64) = (
+  let len = len(text)
+
+  asm "\tmov rax,1"
+  asm "\tmov rsi," text
+  asm "\tmov rdi,1"
+  asm "\tmov rdx," len
+  asm "\tsyscall"
+)
+
+let len(text: &s64): s64 = (
+  let i = 0
+  while text[i]:
+    i = i + 1
+  i
+)
