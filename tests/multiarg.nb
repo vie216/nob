@@ -1,0 +1,7 @@
+let main() = multiarg0(0, 1, 2)
+
+let multiarg0(x: s64, y: s64, z: s64): s64 =
+  multiarg1(x, y, z)
+
+let multiarg1(x: s64, y: s64, z: s64): s64 =
+   x + y + z

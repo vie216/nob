@@ -1,0 +1,9 @@
+let main() = (
+  let str = "hello world\n"
+
+  asm "\tmov rax,1"
+  asm "\tmov rdi,1"
+  asm "\tmov rsi," str
+  asm "\tmov rdx,12"
+  asm "\tsyscall"
+)
