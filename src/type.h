@@ -23,23 +23,19 @@ typedef union {
 typedef struct {
   TypeKind kind;
   TypeAs   as;
+  Str      size;
 } Type;
 
-typedef enum {
-  IntKindS64 = 0,
-  IntKindU8,
-} IntKind;
-
 struct TypeInt {
-  IntKind kind;
+  bool signedd;
 };
 
 struct TypePtr {
   Type points_to;
-  bool is_str_lit;
 };
 
 struct TypeFunc {
+  Str   name;
   Type  result_type;
   Def  *arg_defs;
   i32   arity;
@@ -65,8 +61,8 @@ typedef struct {
 } Funcs;
 
 typedef struct {
-  Def   *defs;
-  Funcs  funcs;
+  Def     *defs;
+  Funcs    funcs;
 } Metadata;
 
 Metadata type_check(Expr program, Def *intrinsic_defs);

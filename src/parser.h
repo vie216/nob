@@ -4,7 +4,8 @@
 #include "str.h"
 
 typedef enum {
-  TypeExprKindIdent = 0,
+  TypeExprKindUnit = 0,
+  TypeExprKindIdent,
   TypeExprKindPtr,
 } TypeExprKind;
 
@@ -39,6 +40,8 @@ typedef enum {
   ExprKindIf,
   ExprKindWhile,
   ExprKindRet,
+  ExprKindAsm,
+  ExprKindDeref,
 } ExprKind;
 
 typedef struct ExprLit   ExprLit;
@@ -50,6 +53,8 @@ typedef struct ExprFunc  ExprFunc;
 typedef struct ExprIf    ExprIf;
 typedef struct ExprWhile ExprWhile;
 typedef struct ExprRet   ExprRet;
+typedef struct ExprAsm   ExprAsm;
+typedef struct ExprDeref ExprDeref;
 
 typedef union {
   ExprLit   *lit;
@@ -61,6 +66,8 @@ typedef union {
   ExprIf    *eef;
   ExprWhile *whail;
   ExprRet   *ret;
+  ExprAsm   *_asm;
+  ExprDeref *deref;
 } ExprAs;
 
 typedef struct {
@@ -91,8 +98,9 @@ struct ExprIdent {
 };
 
 struct ExprCall {
-  Expr       func;
+  Str        name;
   ExprBlock *args;
+  Def       *def;
 };
 
 struct ExprVar {
@@ -118,8 +126,8 @@ struct ExprFunc {
   Args      args;
   Expr      body;
   TypeExpr  result_type;
-  Def      *def;
   i32       func_index;
+  Def      *def;
 };
 
 struct ExprIf {
@@ -137,6 +145,22 @@ struct ExprWhile {
 struct ExprRet {
   Expr result;
   bool has_result;
+};
+
+typedef struct AsmNode AsmNode;
+
+struct AsmNode {
+  Expr     expr;
+  AsmNode *next;
+};
+
+struct ExprAsm {
+  AsmNode *nodes;
+};
+
+struct ExprDeref {
+  Expr body;
+  Expr index;
 };
 
 Expr parse_program(Str source, char *file_path);

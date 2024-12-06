@@ -5,12 +5,11 @@
 
 typedef struct {
   Def   *defs;
-  Def   *intrinsic_defs;
-  Funcs  funcs;
-  Type   current_func_result_type;
-  bool   inside_of_func;
-  bool   has_error;
-  bool   found_main;
+  Funcs funcs;
+  Type  current_func_result_type;
+  bool  inside_of_func;
+  bool  has_error;
+  bool  found_main;
 } Checker;
 
 static bool type_eq(Type a, Type b) {
@@ -23,19 +22,16 @@ static bool type_eq(Type a, Type b) {
   }
 
   case TypeKindInt: {
-    return a.as.eent->kind == b.as.eent->kind;
+    return a.as.eent->signedd == b.as.eent->signedd &&
+           str_eq(a.size, b.size);
   }
 
   case TypeKindPtr: {
-    bool a_is_str_lit = a.as.ptr->is_str_lit;
-    bool b_is_str_lit = b.as.ptr->is_str_lit;
-
-    return type_eq(a.as.ptr->points_to, b.as.ptr->points_to) &&
-           (a_is_str_lit || !b_is_str_lit);
+    return type_eq(a.as.ptr->points_to, b.as.ptr->points_to);
   }
 
   case TypeKindFunc: {
-    if (!type_eq(a.as.func->result_type, b.as.func->result_type) ||
+    if (!str_eq(a.as.func->name, b.as.func->name) ||
         a.as.func->arity != b.as.func->arity)
       return false;
 
@@ -44,7 +40,6 @@ static bool type_eq(Type a, Type b) {
     for (i32 i = 0; i < a.as.func->arity; ++i) {
       if (!type_eq(a_arg->type, b_arg->type))
         return false;
-
       a_arg = a_arg->next;
       b_arg = b_arg->next;
     }
@@ -59,17 +54,22 @@ static bool type_eq(Type a, Type b) {
 
 static Type type_from_type_expr(TypeExpr expr) {
   switch (expr.kind) {
+  case TypeExprKindUnit: {
+    return (Type) {
+      .kind = TypeKindUnit,
+      .size = STR_LIT("0"),
+    };
+  }
+
   case TypeExprKindIdent: {
-    if (str_eq(expr.as.ident->ident, STR_LIT("unit"))) {
-      return (Type) { TypeKindUnit };
-    } else if (str_eq(expr.as.ident->ident, STR_LIT("s64"))) {
+    if (str_eq(expr.as.ident->ident, STR_LIT("s64"))) {
       TypeInt *eent = aalloc(sizeof(TypeInt));
-      eent->kind = IntKindS64;
-      return (Type) { TypeKindInt, { .eent = eent } };
-    } else if (str_eq(expr.as.ident->ident, STR_LIT("u8"))) {
-      TypeInt *eent = aalloc(sizeof(TypeInt));
-      eent->kind = IntKindU8;
-      return (Type) { TypeKindInt, { .eent = eent } };
+      eent->signedd = true;
+      return (Type) {
+        TypeKindInt,
+        { .eent = eent },
+        STR_LIT("8"),
+      };
     }
 
     ERROR("There is no support for custom types yet\n");
@@ -79,13 +79,47 @@ static Type type_from_type_expr(TypeExpr expr) {
   case TypeExprKindPtr: {
     TypePtr *ptr = aalloc(sizeof(TypePtr));
     ptr->points_to = type_from_type_expr(expr.as.ptr->points_to);
-    ptr->is_str_lit = false;
-    return (Type) { TypeKindPtr, { .ptr = ptr } };
+    return (Type) { TypeKindPtr, { .ptr = ptr }, STR_LIT("8") };
   }
   }
 
   ERROR("Unreachable\n");
   exit(1);
+}
+
+static void type_print(Type type) {
+  switch (type.kind) {
+  case TypeKindUnit: {
+    printf("()");
+  } break;
+
+  case TypeKindInt: {
+    if (type.as.eent->signedd)
+      putc('s', stdout);
+    else
+      putc('u', stdout);
+    printf("%ld", str_to_i64(type.size) * 8);
+  } break;
+
+  case TypeKindPtr: {
+    putc('&', stdout);
+    type_print(type.as.ptr->points_to);
+  } break;
+
+  case TypeKindFunc: {
+    printf(STR_FMT"(", STR_ARG(type.as.func->name));
+
+    Def *arg = type.as.func->arg_defs;
+    while (arg) {
+      type_print(arg->type);
+      arg = arg->next;
+      if (arg)
+        fputs(", ", stdout);
+    }
+    putc(')', stdout);
+  } break;
+
+  }
 }
 
 static i32 expr_scope_size(Expr expr) {
@@ -102,7 +136,6 @@ static i32 expr_scope_size(Expr expr) {
   case ExprKindIdent: break;
 
   case ExprKindCall: {
-    scope_size = expr_scope_size(expr.as.call->func);
     for (i32 i = 0; i < expr.as.call->args->len; ++i)
       scope_size += expr_scope_size(expr.as.call->args->items[i]);
   } break;
@@ -114,45 +147,37 @@ static i32 expr_scope_size(Expr expr) {
   case ExprKindFunc: break;
 
   case ExprKindIf: {
-    expr_scope_size(expr.as.eef->cond);
-    expr_scope_size(expr.as.eef->body);
+    scope_size = expr_scope_size(expr.as.eef->cond);
+    scope_size += expr_scope_size(expr.as.eef->body);
     if (expr.as.eef->has_else)
-      expr_scope_size(expr.as.eef->elze);
+      scope_size += expr_scope_size(expr.as.eef->elze);
   } break;
 
   case ExprKindWhile: {
-    expr_scope_size(expr.as.whail->cond);
-    expr_scope_size(expr.as.whail->body);
+    scope_size = expr_scope_size(expr.as.whail->cond);
+    scope_size += expr_scope_size(expr.as.whail->body);
   } break;
 
   case ExprKindRet: {
     if (expr.as.ret->has_result)
-      expr_scope_size(expr.as.ret->result);
+      scope_size = expr_scope_size(expr.as.ret->result);
+  } break;
+
+  case ExprKindAsm: break;
+
+  case ExprKindDeref: {
+    scope_size = expr_scope_size(expr.as.deref->body);
+    scope_size += expr_scope_size(expr.as.deref->index);
   } break;
   }
 
   return scope_size;
 }
 
-static Def *checker_lookup_def(Checker *checker, Str def_name) {
+static Def *checker_lookup_def(Checker *checker, Str target_name) {
   Def *def = checker->defs;
-
   while (def) {
-    if (str_eq(def->name, def_name))
-      return def;
-    def = def->next;
-  }
-
-  for (i32 i = 0; i < checker->funcs.len; ++i) {
-    def = checker->funcs.items[i].expr->def;
-    if (str_eq(def->name, def_name))
-      return def;
-  }
-
-  def = checker->intrinsic_defs;
-
-  while (def) {
-    if (str_eq(def->name, def_name))
+    if (str_eq(def->name, target_name))
       return def;
     def = def->next;
   }
@@ -160,26 +185,11 @@ static Def *checker_lookup_def(Checker *checker, Str def_name) {
   return NULL;
 }
 
-static Def *checker_lookup_def_typed(Checker *checker, Str def_name, Type def_type) {
+static Def *checker_lookup_def_typed(Checker *checker, Str target_name, Type target_type) {
   Def *def = checker->defs;
-
   while (def) {
-    if (str_eq(def->name, def_name) &&
-        type_eq(def->type, def_type))
-      return def;
-    def = def->next;
-  }
-
-  for (i32 i = 0; i < checker->funcs.len; ++i) {
-    def = checker->funcs.items[i].expr->def;
-    if (str_eq(def->name, def_name) && type_eq(def->type, def_type))
-      return def;
-  }
-
-  def = checker->intrinsic_defs;
-
-  while (def) {
-    if (str_eq(def->name, def_name))
+    if (str_eq(def->name, target_name) &&
+        type_eq(def->type, target_type))
       return def;
     def = def->next;
   }
@@ -196,7 +206,6 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
   case ExprKindIdent: break;
 
   case ExprKindCall: {
-    checker_collect_funcs(checker, expr.as.call->func);
     for (i32 i = 0; i < expr.as.call->args->len; ++i)
       checker_collect_funcs(checker, expr.as.call->args->items[i]);
   } break;
@@ -208,24 +217,21 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
   case ExprKindFunc: {
     Args args = expr.as.func->args;
 
-    TypeFunc *func = aalloc(sizeof(TypeFunc));
-    func->result_type = type_from_type_expr(expr.as.func->result_type);
-    func->arg_defs = NULL;
-    func->arity = args.len;
-    Type type = { TypeKindFunc, { .func = func } };
+    Type type = {
+      TypeKindFunc,
+      { .func = aalloc(sizeof(TypeFunc)) },
+      STR_LIT("8"),
+    };
+    type.as.func->name = expr.as.func->name;
+    type.as.func->result_type = type_from_type_expr(expr.as.func->result_type);
+    type.as.func->arg_defs = NULL;
+    type.as.func->arity = args.len;
 
     Def *arg_defs_end = NULL;
     for (i32 i = 0; i < args.len; ++i) {
-      LL_PREPEND(func->arg_defs, arg_defs_end, Def);
+      LL_PREPEND(type.as.func->arg_defs, arg_defs_end, Def);
       arg_defs_end->name = args.items[i].name;
       arg_defs_end->type = type_from_type_expr(args.items[i].type);
-    }
-
-    if (checker_lookup_def_typed(checker, expr.as.func->name, type)) {
-      ERROR("Function `"STR_FMT"` redefined\n",
-            STR_ARG(expr.as.func->name));
-      checker->has_error = true;
-      return;
     }
 
     expr.as.func->func_index = checker->funcs.len;
@@ -234,11 +240,22 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
     expr.as.func->def->type = type;
     expr.as.func->def->is_intrinsic = false;
 
+    if (checker_lookup_def_typed(checker, expr.as.func->name, type)) {
+      ERROR("Function `"STR_FMT"` redefined\n",
+            STR_ARG(expr.as.func->name));
+      checker->has_error = true;
+      return;
+    }
+
     Func new_func = {
       .expr = expr.as.func,
-      .arg_defs = func->arg_defs,
-      .arity = func->arity,
+      .arg_defs = type.as.func->arg_defs,
+      .arity = type.as.func->arity,
     };
+    LL_APPEND(checker->defs, Def);
+    checker->defs->name = expr.as.func->def->name;
+    checker->defs->type = expr.as.func->def->type;
+    checker->defs->is_intrinsic = expr.as.func->def->is_intrinsic;
     DA_APPEND(checker->funcs, new_func);
   } break;
 
@@ -256,6 +273,19 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
 
   case ExprKindRet: {
     checker_collect_funcs(checker, expr.as.ret->result);
+  } break;
+
+  case ExprKindAsm: {
+    AsmNode *node = expr.as._asm->nodes;
+    while (node) {
+      checker_collect_funcs(checker, node->expr);
+      node = node->next;
+    }
+  } break;
+
+  case ExprKindDeref: {
+    checker_collect_funcs(checker, expr.as.deref->body);
+    checker_collect_funcs(checker, expr.as.deref->index);
   } break;
   }
 }
@@ -287,15 +317,15 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
   case ExprKindLit: {
     if (expr.as.lit->kind == LitKindInt) {
       TypeInt *eent = aalloc(sizeof(TypeInt));
-      eent->kind = IntKindS64;
-      return (Type) { TypeKindInt, { .eent = eent } };
+      eent->signedd = true;
+      return (Type) { TypeKindInt, { .eent = eent }, STR_LIT("8") };
     } else if (expr.as.lit->kind == LitKindStr) {
       TypePtr *ptr = aalloc(sizeof(TypePtr));
       ptr->points_to.kind = TypeKindInt;
       ptr->points_to.as.eent = aalloc(sizeof(TypeInt));
-      ptr->points_to.as.eent->kind = IntKindU8;
-      ptr->is_str_lit = true;
-      return (Type) { TypeKindPtr, { .ptr = ptr } };
+      ptr->points_to.as.eent->signedd = true;
+      ptr->points_to.size = STR_LIT("8");
+      return (Type) { TypeKindPtr, { .ptr = ptr }, STR_LIT("8") };
     }
 
     ERROR("Unreachable\n");
@@ -308,22 +338,23 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
       ERROR("Undeclared identifier: `"STR_FMT"`\n",
             STR_ARG(expr.as.ident->ident));
       checker->has_error = true;
-      return (Type) { TypeKindUnit, {0} };
+      return (Type) { TypeKindUnit, {0}, STR_LIT("0") };
     }
 
     return expr.as.ident->def->type;
-  } break;
+  }
 
   case ExprKindVar: {
     Type value_type = checker_type_check_expr(checker, expr.as.var->value);
-    if (value_type.kind == TypeKindPtr)
-      value_type.as.ptr->is_str_lit = false;
 
     if (expr.as.var->has_type) {
       Type var_type = type_from_type_expr(expr.as.var->type);
       if (!type_eq(value_type, var_type)) {
-        ERROR("Type of variable and type of value assigned to it are different\n");
-        INFO("TODO: type printing\n");
+        ERROR("Variable is of type ");
+        type_print(var_type);
+        fputs(" but initializer is of type ", stdout);
+        type_print(value_type);
+        putc('\n', stdout);
         checker->has_error = true;
       }
     }
@@ -333,47 +364,59 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
     checker->defs->type = value_type;
     expr.as.var->def = checker->defs;
 
-    return checker->defs->type;
-  } break;
+    return value_type;
+  }
 
   case ExprKindCall: {
-    Type func_type = checker_type_check_expr(checker, expr.as.call->func);
-    if (func_type.kind != TypeKindFunc) {
-      ERROR("Only functions can be called\n");
-      INFO("TODO: type printing\n");
-      checker->has_error = true;
-      return func_type;
-    }
-
     ExprBlock *args = expr.as.call->args;
-    if (func_type.as.func->arity != args->len) {
-      ERROR("Expected %d arguments, but got %d\n",
-            func_type.as.func->arity, args->len);
-      checker->has_error = true;
-      return func_type;
-    }
 
-    Def *arg = func_type.as.func->arg_defs;
+    Type type = {
+      TypeKindFunc,
+      { .func = aalloc(sizeof(TypeFunc)) },
+      STR_LIT("8"),
+    };
+    type.as.func->name = expr.as.func->name;
+    type.as.func->arg_defs = NULL;
+    type.as.func->arity = args->len;
+
+    Def *arg_defs_end = NULL;
     for (i32 i = 0; i < args->len; ++i) {
-      Type arg_type = checker_type_check_expr(checker, args->items[i]);
-      if (!type_eq(arg_type, arg->type)) {
-        ERROR("Unexpected argument type\n");
-        INFO("TODO: type printing\n");
-        checker->has_error = true;
-      }
-
-      arg = arg->next;
+      LL_PREPEND(type.as.func->arg_defs, arg_defs_end, Def);
+      arg_defs_end->type = checker_type_check_expr(checker, args->items[i]);
     }
 
-    return func_type.as.func->result_type;
-  } break;
+    expr.as.call->def = checker_lookup_def_typed(checker, type.as.func->name, type);
+    if (!expr.as.call->def) {
+      ERROR("Function with such signature not found: ");
+      type_print(type);
+      putc('\n', stdout);
+      checker->has_error = true;
+      return (Type) { TypeKindUnit, {0}, STR_LIT("0") };
+    } else if (expr.as.call->def->type.kind != TypeKindFunc) {
+      ERROR("Expected function, but got: ");
+      type_print(type);
+      putc('\n', stdout);
+      checker->has_error = true;
+      return expr.as.call->def->type;
+    }
+
+    return expr.as.call->def->type.as.func->result_type;
+  }
 
   case ExprKindFunc: {
-    if (str_eq(expr.as.func->name, STR("main", 4)))
+    if (str_eq(expr.as.func->name, STR_LIT("main")))
       checker->found_main = true;
 
     Def *prev_defs = checker->defs;
-    checker->defs = checker->funcs.items[expr.as.func->func_index].arg_defs;
+
+    Def *arg_def = checker->funcs.items[expr.as.func->func_index].arg_defs;
+    Def *last_arg_def = arg_def;
+    while (last_arg_def && last_arg_def->next)
+      last_arg_def = last_arg_def->next;
+    if (last_arg_def) {
+      last_arg_def->next = checker->defs;
+      checker->defs = arg_def;
+    }
 
     Type func_type = expr.as.func->def->type;
     Type result_type = func_type.as.func->result_type;
@@ -385,24 +428,30 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
     Type body_type = checker_type_check_expr(checker, expr.as.func->body);
     if (result_type.kind != TypeKindUnit && !type_eq(body_type, result_type)) {
-      ERROR("Unexpected function return type\n");
-      INFO("TODO: type printing\n");
+      ERROR("Current funcion return type is ");
+      type_print(result_type);
+      fputs(" but got ", stdout);
+      type_print(body_type);
+      putc('\n', stdout);
       checker->has_error = true;
     }
 
     checker->inside_of_func = prev_inside_of_func;
     checker->current_func_result_type = prev_func_result_type;
 
+    if (last_arg_def)
+      last_arg_def->next = NULL;
     checker->defs = prev_defs;
 
     return func_type;
-  } break;
+  }
 
   case ExprKindIf: {
     Type cond_type = checker_type_check_expr(checker, expr.as.eef->cond);
     if (cond_type.kind != TypeKindInt && cond_type.kind != TypeKindPtr) {
-      ERROR("Expected integer or pointer\n");
-      INFO("TODO: type printing\n");
+      ERROR("Expected integer or pointer, but got ");
+      type_print(cond_type);
+      putc('\n', stdout);
       checker->has_error = true;
     }
 
@@ -419,20 +468,21 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
     }
 
     return (Type) { TypeKindUnit };
-  } break;
+  }
 
   case ExprKindWhile: {
     Type cond_type = checker_type_check_expr(checker, expr.as.whail->cond);
     if (cond_type.kind != TypeKindInt && cond_type.kind != TypeKindPtr) {
-      ERROR("Expected integer or pointer\n");
-      INFO("TODO: type printing\n");
+      ERROR("Expected integer or pointer, but got ");
+      type_print(cond_type);
+      putc('\n', stdout);
       checker->has_error = true;
     }
 
     checker_type_check_expr(checker, expr.as.whail->body);
 
     return (Type) { TypeKindUnit };
-  } break;
+  }
 
   case ExprKindRet: {
     if (!checker->inside_of_func) {
@@ -442,15 +492,50 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
     Type result_type = { TypeKindUnit };
     if (expr.as.ret->has_result)
-      checker_type_check_expr(checker, expr.as.ret->result);
+      result_type = checker_type_check_expr(checker, expr.as.ret->result);
 
     if (!type_eq(result_type, checker->current_func_result_type)) {
-      ERROR("Different function type and return type\n");
-      INFO("TODO: type printing\n");
+      ERROR("Current return type is ");
+      type_print(checker->current_func_result_type);
+      fputs(" but this expression returns ", stdout);
+      type_print(result_type);
+      putc('\n', stdout);
       checker->has_error = true;
     }
 
     return result_type;
+  }
+
+  case ExprKindAsm: {
+    AsmNode *node = expr.as._asm->nodes;
+    while (node) {
+      checker_type_check_expr(checker, node->expr);
+      node = node->next;
+    }
+
+    return (Type) { TypeKindUnit };
+  }
+
+  case ExprKindDeref: {
+    Type body_type = checker_type_check_expr(checker, expr.as.deref->body);
+    if (body_type.kind != TypeKindPtr) {
+      ERROR("Expected pointer, but got ");
+      type_print(body_type);
+      putc('\n', stderr);
+      checker->has_error = true;
+      return (Type) { TypeKindUnit };
+    }
+
+    Type index_type = checker_type_check_expr(checker, expr.as.deref->index);
+    if (index_type.kind != TypeKindInt && index_type.kind != TypeKindPtr) {
+      ERROR("Expected integer or pointer, but got");
+      type_print(index_type);
+      putc('\n', stderr);
+      checker->has_error = true;
+      return (Type) { TypeKindUnit };
+    }
+
+    return body_type.as.ptr->points_to;
   } break;
   }
 
@@ -460,7 +545,7 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
 
 Metadata type_check(Expr program, Def *intrinsic_defs) {
   Checker checker = {
-    .intrinsic_defs = intrinsic_defs,
+    .defs = intrinsic_defs,
     .current_func_result_type = { TypeKindUnit },
     .inside_of_func = false,
   };

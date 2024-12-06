@@ -95,72 +95,115 @@ void assemble(char *asm_path) {
     exit(1);
 }
 
+#define DEF_INT_BINOP(op_name)                                             \
+  do {                                                                     \
+    func = aalloc(sizeof(TypeFunc));                                       \
+    int_arg = aalloc(sizeof(TypeInt));                                     \
+    int_arg->signedd = true;                                               \
+    func->name = STR_LIT(op_name);                                         \
+    func->result_type = (Type) { TypeKindInt, { .eent = int_arg }, size }; \
+    func->arg_defs = arg_defs;                                             \
+    func->arity = 2;                                                       \
+    bin_op_type = (Type) { TypeKindFunc, { .func = func }, size };         \
+  } while (0)
+
 Def *intrinsic_defs(void) {
   Def *defs = NULL;
   Def *arg_defs = NULL;
-  Def *arg_defs_end = NULL;
-
-  LL_PREPEND(arg_defs, arg_defs_end, Def);
-  LL_PREPEND(arg_defs, arg_defs_end, Def);
-
-  TypeInt *eent = aalloc(sizeof(TypeInt));
-  eent->kind = IntKindS64;
-  arg_defs->type = (Type) { TypeKindInt, { .eent = eent } };
-
-  eent = aalloc(sizeof(TypeInt));
-  eent->kind = IntKindS64;
-  arg_defs_end->type = (Type) { TypeKindInt, { .eent = eent } };
-
-  TypeFunc *func = aalloc(sizeof(TypeFunc));
-  eent = aalloc(sizeof(TypeInt));
-  eent->kind = IntKindS64;
-  func->result_type = (Type) { TypeKindInt, { .eent = eent } };
-  func->arg_defs = arg_defs;
-  func->arity = 2;
-  Type bin_op = { TypeKindFunc, { .func = func } };
-
-  LL_APPEND(defs, Def);
-  defs->name = STR_LIT("+");
-  defs->type = bin_op;
-  defs->is_intrinsic = true;
-
-  LL_APPEND(defs, Def);
-  defs->name = STR_LIT("-");
-  defs->type = bin_op;
-  defs->is_intrinsic = true;
-
-  LL_APPEND(defs, Def);
-  defs->name = STR_LIT("*");
-  defs->type = bin_op;
-  defs->is_intrinsic = true;
-
-  LL_APPEND(defs, Def);
-  defs->name = STR_LIT("/");
-  defs->type = bin_op;
-  defs->is_intrinsic = true;
-
-  LL_APPEND(defs, Def);
-  defs->name = STR_LIT("%");
-  defs->type = bin_op;
-  defs->is_intrinsic = true;
+  Str size = STR_LIT("8");
 
   arg_defs = aalloc(sizeof(Def));
-  TypePtr *ptr = aalloc(sizeof(TypePtr));
-  eent = aalloc(sizeof(TypeInt));
-  eent->kind = IntKindU8;
-  ptr->points_to = (Type) { TypeKindInt, { .eent = eent } };
-  ptr->is_str_lit = true;
-  arg_defs->type = (Type) { TypeKindPtr, { .ptr = ptr } };
+  arg_defs->next = aalloc(sizeof(Def));
 
-  func = aalloc(sizeof(TypeFunc));
-  func->result_type = (Type) { TypeKindUnit };
+  TypeInt *int_arg = aalloc(sizeof(TypeInt));
+  int_arg->signedd = true;
+  arg_defs->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+
+  int_arg = aalloc(sizeof(TypeInt));
+  int_arg->signedd = true;
+  arg_defs->next->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+
+  TypeFunc *func = aalloc(sizeof(TypeFunc));
+  int_arg = aalloc(sizeof(TypeInt));
+  int_arg->signedd = true;
+  func->result_type = (Type) { TypeKindInt, { .eent = int_arg }, size };
   func->arg_defs = arg_defs;
-  func->arity = 1;
-  Type _asm = { TypeKindFunc, { .func = func } };
+  int_arg = aalloc(sizeof(TypeInt));
+  int_arg->signedd = true;
+  arg_defs->next->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
 
+  Type bin_op_type;
+
+  DEF_INT_BINOP("=");
   LL_APPEND(defs, Def);
-  defs->name = STR_LIT("asm");
-  defs->type = _asm;
+  defs->name = STR_LIT("=");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("+");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("+");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("-");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("-");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("*");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("*");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("/");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("/");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("%");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("%");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("==");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("==");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("!=");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("!=");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP(">");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT(">");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("<");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("<");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP(">=");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT(">=");
+  defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_BINOP("<=");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("<=");
+  defs->type = bin_op_type;
   defs->is_intrinsic = true;
 
   return defs;

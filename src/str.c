@@ -37,6 +37,21 @@ void str_println(Str str) {
   str_fprintln(stdout, str);
 }
 
+i32 str_to_i32(Str str) {
+  return (i32) str_to_i64(str);
+}
+
+i64 str_to_i64(Str str) {
+  i64 num = 0;
+
+  for (i32 i = 0; i < str.len; ++i) {
+    num *= 10;
+    num += str.ptr[i] - '0';
+  }
+
+  return num;
+}
+
 static void sb_reserve_space(StringBuilder *sb, i32 amount) {
   if (amount > sb->cap - sb->len) {
     if (sb->cap != 0) {
@@ -51,11 +66,16 @@ static void sb_reserve_space(StringBuilder *sb, i32 amount) {
   }
 }
 
-Str sb_to_str(StringBuilder *sb) {
+Str sb_to_str(StringBuilder sb) {
   return (Str) {
-    .ptr = sb->buffer,
-    .len = sb->len,
+    .ptr = sb.buffer,
+    .len = sb.len,
   };
+}
+
+void sb_push_char(StringBuilder *sb, char ch) {
+  sb_reserve_space(sb, 1);
+  sb->buffer[sb->len++] = ch;
 }
 
 void sb_push(StringBuilder *sb, char *str) {

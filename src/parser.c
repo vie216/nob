@@ -22,7 +22,10 @@ typedef enum {
   TokenKindElif   = 1 << 13,
   TokenKindWhile  = 1 << 14,
   TokenKindRet    = 1 << 15,
-  TokenKindCount  = 16,
+  TokenKindAsm    = 1 << 16,
+  TokenKindOSqr   = 1 << 17,
+  TokenKindCSqr   = 1 << 18,
+  TokenKindCount  = 19,
 } TokenKind;
 
 typedef struct {
@@ -39,17 +42,18 @@ typedef struct {
   Token  last_token;
 } Parser;
 
-#define IS_OP(ch) !(isalnum(ch) || isspace(ch) || \
-                    ch == '"' || ch == '\'' ||    \
-                    ch == '(' || ch == ')' ||     \
-                    ch == '{' || ch == '}' ||     \
-                    ch == '[' || ch == ']' ||     \
-                    ch == ';' || ch == ':' ||     \
+#define IS_OP(ch) !(isalnum(ch) || isspace(ch) ||  \
+                    ch == '"' || ch == '\'' ||     \
+                    ch == '(' || ch == ')'  ||     \
+                    ch == '{' || ch == '}'  ||     \
+                    ch == '[' || ch == ']'  ||     \
+                    ch == ';' || ch == ':'  ||     \
                     ch == '#' || ch == ',')
 #define IS_EXPR_END(token) ((token).kind == TokenKindIntLit ||  \
                             (token).kind == TokenKindStrLit ||  \
-                            (token).kind == TokenKindIdent ||   \
-                            (token).kind == TokenKindCParen)
+                            (token).kind == TokenKindIdent  ||  \
+                            (token).kind == TokenKindCParen ||  \
+                            (token).kind == TokenKindCSqr)
 
 static i32 op_precedence(Str op) {
   struct OpPrecedence {
@@ -59,13 +63,20 @@ static i32 op_precedence(Str op) {
 
   static struct OpPrecedence precedences[] = {
     { STR("=", 1), 1 },
-    { STR("||", 2), 2 },
-    { STR("&&", 2), 3 },
-    { STR("|", 1), 5 },
-    { STR("^", 1), 6 },
-    { STR("&", 1), 7 },
-    { STR("+", 1), 8 }, { STR("-", 1), 8 },
-    { STR("*", 1), 9 }, { STR("/", 1), 9 }, { STR("%", 1), 9 },
+    { STR_LIT("=="), 2 },
+    { STR_LIT("!="), 2 },
+    { STR_LIT(">"), 2 },
+    { STR_LIT("<"), 2 },
+    { STR_LIT(">="), 2 },
+    { STR_LIT("<="), 2 },
+    { STR_LIT("|"), 3 },
+    { STR_LIT("^"), 4 },
+    { STR_LIT("&"), 5 },
+    { STR_LIT("+"), 6 },
+    { STR_LIT("-"), 6 },
+    { STR_LIT("*"), 7 },
+    { STR_LIT("/"), 7 },
+    { STR_LIT("%"), 7 },
   };
 
   for (i32 i = 0; i < (int) ARRAY_LEN(precedences); ++i)
@@ -143,7 +154,7 @@ static Token parser_next_token(Parser *parser) {
   TokenKind kind = TokenKindNone;
   char *start = parser->current++;
 
-  _Static_assert (TokenKindCount == 16, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 19, "All token kinds should be handled here.");
   if (isdigit(*start)) {
     kind = TokenKindIntLit;
     while (!parser_eof(parser) && isdigit(*parser->current))
@@ -166,7 +177,7 @@ static Token parser_next_token(Parser *parser) {
       i32 token_kind;
     };
 
-    _Static_assert (TokenKindCount == 16, "Maybe new keyword was added? Then update this place.");
+    _Static_assert (TokenKindCount == 19, "Maybe new keyword was added? Then update this place.");
     static struct Keyword keywords[] = {
       { STR_LIT("let"),   TokenKindLet },
       { STR_LIT("if"),    TokenKindIf },
@@ -174,6 +185,7 @@ static Token parser_next_token(Parser *parser) {
       { STR_LIT("elif"),  TokenKindElif },
       { STR_LIT("while"), TokenKindWhile },
       { STR_LIT("ret"),   TokenKindRet },
+      { STR_LIT("asm"),   TokenKindAsm },
     };
 
     for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i) {
@@ -206,6 +218,10 @@ static Token parser_next_token(Parser *parser) {
     }
 
     parser->current++;
+  } else if (*start == '[') {
+    kind = TokenKindOSqr;
+  } else if (*start == ']') {
+    kind = TokenKindCSqr;
   }
 
   if (kind == TokenKindNone) {
@@ -219,8 +235,12 @@ static Token parser_next_token(Parser *parser) {
     .ptr = start,
     .len = parser->current - start,
   };
-  if (kind == TokenKindStrLit)
+
+  if (kind == TokenKindStrLit) {
+    str.ptr += 1;
+    str.len -= 2;
     str = escape_str(str);
+  }
 
   return parser->last_token = (Token) {
     .kind = kind,
@@ -243,11 +263,11 @@ static void print_token_kind(TokenKind token_kind) {
   char *prev_str = NULL;
   bool printed = false;
 
-  _Static_assert (TokenKindCount == 16, "All token kinds should be handled here.");
+  _Static_assert (TokenKindCount == 19, "All token kinds should be handled here.");
   static char *token_kind_names[TokenKindCount] = {
     "end of file", "integer", "string", "operator", "semicolon",
     "identifier", "left paren", "right paren", "comma", "colon",
-    "let", "if", "else", "elif", "while", "ret",
+    "let", "if", "else", "elif", "while", "ret", "asm",
   };
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
@@ -290,8 +310,12 @@ static Token parser_expect_token(Parser *parser, TokenKind expected_kind) {
 }
 
 static TypeExpr parser_parse_type_expr(Parser *parser) {
-  Token token = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
-  if (token.kind == TokenKindIdent) {
+  Token token = parser_expect_token(parser, TokenKindOParen | TokenKindIdent | TokenKindOp);
+
+  if (token.kind == TokenKindOParen) {
+    parser_expect_token(parser, TokenKindCParen);
+    return (TypeExpr) { TypeExprKindUnit };
+  } else if (token.kind == TokenKindIdent) {
     TypeExprIdent *ident = aalloc(sizeof(TypeExprIdent));
     ident->ident = token.str;
     return (TypeExpr) {
@@ -309,16 +333,14 @@ static TypeExpr parser_parse_type_expr(Parser *parser) {
 
     TypeExprPtr *ptr = aalloc(sizeof(TypeExprPtr));
     ptr->points_to = parser_parse_type_expr(parser);
-    return (TypeExpr) {
-      .kind = TypeExprKindPtr,
-      .as = { .ptr = ptr },
-    };
+    return (TypeExpr) { TypeExprKindPtr, { .ptr = ptr } };
   }
 
   ERROR("Unreachable\n");
   exit(1);
 }
 
+static Expr parser_parse_lhs(Parser *parser);
 static Expr parser_parse_expr(Parser *parser, i32 min_precedence);
 static Expr parser_parse_block(Parser *parser, TokenKind sep, TokenKind end_with);
 
@@ -326,14 +348,7 @@ static Expr parser_parse_let(Parser *parser) {
   Args args = {0};
   bool is_func = false;
   bool has_type = false;
-
-  TypeExprIdent *ident = aalloc(sizeof(TypeExprIdent));
-  ident->ident = STR_LIT("unit");
-  TypeExpr type = {
-    .kind = TypeExprKindIdent,
-    .as = { .ident = ident },
-  };
-
+  TypeExpr type = { TypeExprKindUnit };
   Token name = parser_expect_token(parser, TokenKindIdent | TokenKindOp);
   Token token = parser_expect_token(parser,
                                     TokenKindOParen | TokenKindOp |
@@ -445,6 +460,33 @@ static Expr parser_parse_ret(Parser *parser) {
   return ret;
 }
 
+static Expr parser_parse_asm(Parser *parser) {
+  Expr _asm;
+  _asm.kind = ExprKindAsm;
+  _asm.as._asm = aalloc(sizeof(Expr));
+  _asm.as._asm->nodes = NULL;
+
+  AsmNode *nodes_end = NULL;
+  while (parser_peek_token(*parser, 1).kind != TokenKindSemi) {
+    LL_PREPEND(_asm.as._asm->nodes, nodes_end, AsmNode);
+    Token token = parser_expect_token(parser, TokenKindStrLit | TokenKindIdent);
+    if (token.kind == TokenKindStrLit) {
+      nodes_end->expr.kind = ExprKindLit;
+      nodes_end->expr.as.lit = aalloc(sizeof(ExprLit));
+      nodes_end->expr.as.lit->kind = LitKindStr;
+      nodes_end->expr.as.lit->lit = token.str;
+    } else if (token.kind == TokenKindIdent) {
+      nodes_end->expr.kind = ExprKindIdent;
+      nodes_end->expr.as.ident = aalloc(sizeof(ExprIdent));
+      nodes_end->expr.as.ident->ident = token.str;
+    }
+  }
+
+  nodes_end->next = NULL;
+
+  return _asm;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_peek_token(*parser, 1);
@@ -454,9 +496,7 @@ static Expr parser_parse_lhs(Parser *parser) {
 
     lhs.kind = ExprKindCall;
     lhs.as.call = aalloc(sizeof(ExprCall));
-    lhs.as.call->func.kind = ExprKindIdent;
-    lhs.as.call->func.as.ident = aalloc(sizeof(ExprIdent));
-    lhs.as.call->func.as.ident->ident = token.str;
+    lhs.as.call->name = token.str;
     lhs.as.call->args = aalloc(sizeof(ExprBlock));
     *lhs.as.call->args = (ExprBlock) {
       .items = aalloc(sizeof(Expr)),
@@ -472,9 +512,10 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindIntLit | TokenKindIdent |
                               TokenKindOParen | TokenKindStrLit |
                               TokenKindLet | TokenKindIf |
-                              TokenKindWhile | TokenKindRet);
+                              TokenKindWhile | TokenKindRet |
+                              TokenKindAsm);
 
-  _Static_assert(TokenKindCount == 16, "All token kinds should be handled here.");
+  _Static_assert(TokenKindCount == 19, "All token kinds should be handled here.");
   if (token.kind == TokenKindIntLit) {
     lhs.kind = ExprKindLit;
     lhs.as.lit = aalloc(sizeof(ExprLit));
@@ -486,9 +527,20 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs.as.lit->kind = LitKindStr;
     lhs.as.lit->lit = token.str;
   } else if (token.kind == TokenKindIdent) {
-    lhs.kind = ExprKindIdent;
-    lhs.as.ident = aalloc(sizeof(ExprIdent));
-    lhs.as.ident->ident = token.str;
+    if (parser_peek_token(*parser, 1).kind == TokenKindOParen) {
+      parser_next_token(parser);
+
+      Expr args = parser_parse_block(parser, TokenKindComma, TokenKindCParen);
+
+      lhs.kind = ExprKindCall;
+      lhs.as.call = aalloc(sizeof(ExprCall));
+      lhs.as.call->name = token.str;
+      lhs.as.call->args = args.as.block;
+    } else {
+      lhs.kind = ExprKindIdent;
+      lhs.as.ident = aalloc(sizeof(ExprIdent));
+      lhs.as.ident->ident = token.str;
+    }
   } else if (token.kind == TokenKindOParen) {
     lhs = parser_parse_block(parser, TokenKindSemi, TokenKindCParen);
     if (lhs.as.block->len == 1) {
@@ -504,17 +556,20 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs = parser_parse_while(parser);
   } else if (token.kind == TokenKindRet) {
     lhs = parser_parse_ret(parser);
+  } else if (token.kind == TokenKindAsm) {
+    lhs = parser_parse_asm(parser);
   }
 
-  if (parser_peek_token(*parser, 1).kind == TokenKindOParen) {
+  while (parser_peek_token(*parser, 1).kind == TokenKindOSqr) {
     parser_next_token(parser);
-    Expr func = lhs;
-    Expr args = parser_parse_block(parser, TokenKindComma, TokenKindCParen);
 
-    lhs.kind = ExprKindCall;
-    lhs.as.call = aalloc(sizeof(ExprCall));
-    lhs.as.call->func = func;
-    lhs.as.call->args = args.as.block;
+    ExprDeref *deref = aalloc(sizeof(ExprDeref));
+    deref->body = lhs;
+    deref->index = parser_parse_expr(parser, 0);
+    lhs.kind = ExprKindDeref;
+    lhs.as.deref = deref;
+
+    parser_expect_token(parser, TokenKindCSqr);
   }
 
   return lhs;
@@ -534,9 +589,7 @@ static Expr parser_parse_expr(Parser *parser, i32 min_precedence) {
     Expr rhs = parser_parse_expr(parser, precedence);
 
     expr = aalloc(sizeof(ExprCall));
-    expr->func.kind = ExprKindIdent;
-    expr->func.as.ident = aalloc(sizeof(ExprIdent));
-    expr->func.as.ident->ident = token.str;
+    expr->name = token.str;
     expr->args = aalloc(sizeof(ExprBlock));
     *expr->args = (ExprBlock) {
       .items = aalloc(sizeof(Expr) * 2),

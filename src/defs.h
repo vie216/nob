@@ -20,6 +20,16 @@
     (da).items[(da).len++] = element;                                 \
   } while (0)
 
+#define LL_LEN(ll, type, target) \
+  do {                     \
+    *target = 0;           \
+    type *next = ll;       \
+    while (next) {         \
+      ++*target;           \
+      next = next->next;   \
+    }                      \
+  } while (0)              \
+
 #define LL_APPEND(ll, type)           \
   do {                                \
     type *new = aalloc(sizeof(type)); \
@@ -34,6 +44,7 @@
       ll_end->next = new;             \
     else                              \
       ll = new;                       \
+                                      \
     ll_end = new;                     \
   } while(0)
 
