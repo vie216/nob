@@ -4,12 +4,12 @@
 #include "arena.h"
 
 typedef struct {
-  Def     *defs;
-  Funcs    funcs;
-  Type     current_func_result_type;
-  bool     inside_of_func;
-  bool     has_error;
-  bool     found_main;
+  Def   *defs;
+  Funcs  funcs;
+  Type   current_func_result_type;
+  bool   inside_of_func;
+  bool   has_error;
+  bool   found_main;
 } Checker;
 
 static bool type_eq(Type a, Type b) {
@@ -241,6 +241,7 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
     expr.as.func->def->name = expr.as.func->name;
     expr.as.func->def->type = type;
     expr.as.func->def->is_intrinsic = false;
+    expr.as.func->def->next = checker->defs;
 
     if (checker_lookup_def_typed(checker, expr.as.func->name, type)) {
       ERROR("Function `"STR_FMT"` redefined\n",
@@ -249,15 +250,14 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
       return;
     }
 
+    checker->defs = expr.as.func->def;
+
     Func new_func = {
       .expr = expr.as.func,
       .arg_defs = type.as.func->arg_defs,
       .arity = type.as.func->arity,
     };
-    LL_APPEND(checker->defs, Def);
-    checker->defs->name = expr.as.func->def->name;
-    checker->defs->type = expr.as.func->def->type;
-    checker->defs->is_intrinsic = expr.as.func->def->is_intrinsic;
+
     DA_APPEND(checker->funcs, new_func);
   } break;
 
