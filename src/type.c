@@ -122,7 +122,7 @@ static void type_print(Type type) {
   }
 }
 
-static i32 expr_scope_size(Expr expr) {
+static i32 expr_scope_size(Expr expr, i32 *args_count_in_subcall) {
   i32 scope_size = 0;
 
   switch (expr.kind) {
@@ -130,44 +130,47 @@ static i32 expr_scope_size(Expr expr) {
 
   case ExprKindBlock: {
     for (i32 i = 0; i < expr.as.block->len; ++i)
-      scope_size += expr_scope_size(expr.as.block->items[i]);
+      scope_size += expr_scope_size(expr.as.block->items[i], args_count_in_subcall);
   } break;
 
   case ExprKindIdent: break;
 
   case ExprKindCall: {
+    if (expr.as.call->args->len > *args_count_in_subcall)
+      *args_count_in_subcall = expr.as.call->args->len;
+
     for (i32 i = 0; i < expr.as.call->args->len; ++i)
-      scope_size += expr_scope_size(expr.as.call->args->items[i]);
+      scope_size += expr_scope_size(expr.as.call->args->items[i], args_count_in_subcall);
   } break;
 
   case ExprKindVar: {
-    scope_size = 8 + expr_scope_size(expr.as.var->value);
+    scope_size = 8 + expr_scope_size(expr.as.var->value, args_count_in_subcall);
   } break;
 
   case ExprKindFunc: break;
 
   case ExprKindIf: {
-    scope_size = expr_scope_size(expr.as.eef->cond);
-    scope_size += expr_scope_size(expr.as.eef->body);
+    scope_size = expr_scope_size(expr.as.eef->cond, args_count_in_subcall);
+    scope_size += expr_scope_size(expr.as.eef->body, args_count_in_subcall);
     if (expr.as.eef->has_else)
-      scope_size += expr_scope_size(expr.as.eef->elze);
+      scope_size += expr_scope_size(expr.as.eef->elze, args_count_in_subcall);
   } break;
 
   case ExprKindWhile: {
-    scope_size = expr_scope_size(expr.as.whail->cond);
-    scope_size += expr_scope_size(expr.as.whail->body);
+    scope_size = expr_scope_size(expr.as.whail->cond, args_count_in_subcall);
+    scope_size += expr_scope_size(expr.as.whail->body, args_count_in_subcall);
   } break;
 
   case ExprKindRet: {
     if (expr.as.ret->has_result)
-      scope_size = expr_scope_size(expr.as.ret->result);
+      scope_size = expr_scope_size(expr.as.ret->result, args_count_in_subcall);
   } break;
 
   case ExprKindAsm: break;
 
   case ExprKindDeref: {
-    scope_size = expr_scope_size(expr.as.deref->body);
-    scope_size += expr_scope_size(expr.as.deref->index);
+    scope_size = expr_scope_size(expr.as.deref->body, args_count_in_subcall);
+    scope_size += expr_scope_size(expr.as.deref->index, args_count_in_subcall);
   } break;
 
   case ExprKindUse: break;
@@ -575,7 +578,13 @@ Metadata type_check(Expr program, Def *intrinsic_defs) {
 
   for (i32 i = 0; i < checker.funcs.len; ++i) {
     Func *func = checker.funcs.items + i;
-    func->scope_size = expr_scope_size(func->expr->body);
+    i32 max_args_count_in_subcall = 0;
+    func->scope_size = expr_scope_size(func->expr->body, &max_args_count_in_subcall);
+
+    if (func->expr->args.len < max_args_count_in_subcall)
+      func->scope_size += func->expr->args.len * 8;
+    else
+      func->scope_size += max_args_count_in_subcall * 8;
   }
 
   return (Metadata) {

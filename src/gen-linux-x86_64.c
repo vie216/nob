@@ -298,8 +298,6 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
     sb_push(&gen->sb, "\n");
   }
 
-  gen->stack_used += args_count * 8;
-
   i32 prev_stack_used = gen->stack_used;
 
   for (i32 i = 0; i < call->args->len; ++i)
@@ -333,7 +331,7 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
 static Str gen_var_linux_x86_64(Generator *gen, ExprVar *var, Target target) {
   var->def->loc = gen_stack_alloc(gen, 8);
 
-  gen->stack_used -= 8;
+  gen->stack_used += 8;
 
   Var new_var = { var->name, gen->stack_used };
   DA_APPEND(gen->vars, new_var);
