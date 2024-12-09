@@ -170,7 +170,7 @@ static i32 expr_scope_size(Expr expr) {
     scope_size += expr_scope_size(expr.as.deref->index);
   } break;
 
-  case ExprKindMod: break;
+  case ExprKindUse: break;
   }
 
   return scope_size;
@@ -290,9 +290,9 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
     checker_collect_funcs(checker, expr.as.deref->index);
   } break;
 
-  case ExprKindMod: {
-    for (i32 i = 0; i < expr.as.mod->content->len; ++i)
-      checker_collect_funcs(checker, expr.as.mod->content->items[i]);
+  case ExprKindUse: {
+    for (i32 i = 0; i < expr.as.use->content->len; ++i)
+      checker_collect_funcs(checker, expr.as.use->content->items[i]);
   } break;
   }
 }
@@ -545,9 +545,9 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
     return body_type.as.ptr->points_to;
   } break;
 
-  case ExprKindMod: {
-    for (i32 i = 0; i < expr.as.mod->content->len; ++i)
-      checker_type_check_expr(checker, expr.as.mod->content->items[i]);
+  case ExprKindUse: {
+    for (i32 i = 0; i < expr.as.use->content->len; ++i)
+      checker_type_check_expr(checker, expr.as.use->content->items[i]);
     return (Type) { TypeKindUnit };
   };
   }

@@ -1,8 +1,10 @@
-#include "io.h"
-#include "log.h"
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "io.h"
+#include "log.h"
+#include "arena.h"
 
 void parse_args(int argc, char **argv,
                 char **input_path,
@@ -52,7 +54,7 @@ Str read_file(char *path) {
 
   fseek(file, 0, SEEK_END);
   content.len = ftell(file);
-  content.ptr = malloc(content.len);
+  content.ptr = aalloc(content.len);
   fseek(file, 0, SEEK_SET);
   fread(content.ptr, 1, content.len, file);
   fclose(file);

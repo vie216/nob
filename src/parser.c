@@ -27,7 +27,7 @@ typedef enum {
   TokenKindAsm    = 1 << 16,
   TokenKindOSqr   = 1 << 17,
   TokenKindCSqr   = 1 << 18,
-  TokenKindMod    = 1 << 19,
+  TokenKindUse    = 1 << 19,
   TokenKindCount  = 20,
 } TokenKind;
 
@@ -189,7 +189,7 @@ static Token parser_next_token(Parser *parser) {
       { STR_LIT("while"), TokenKindWhile },
       { STR_LIT("ret"),   TokenKindRet },
       { STR_LIT("asm"),   TokenKindAsm },
-      { STR_LIT("mod"),   TokenKindMod },
+      { STR_LIT("use"),   TokenKindUse },
     };
 
     for (i32 i = 0; i < (i32) ARRAY_LEN(keywords); ++i) {
@@ -271,7 +271,7 @@ static void print_token_kind(TokenKind token_kind) {
   static char *token_kind_names[TokenKindCount] = {
     "end of file", "integer", "string", "operator", "semicolon",
     "identifier", "left paren", "right paren", "comma", "colon",
-    "let", "if", "else", "elif", "while", "ret", "asm", "mod",
+    "let", "if", "else", "elif", "while", "ret", "asm", "use",
   };
 
   for (i32 i = 0; i < TokenKindCount; ++i) {
@@ -491,21 +491,27 @@ static Expr parser_parse_asm(Parser *parser) {
   return _asm;
 }
 
-static Expr parser_parse_mod(Parser *parser) {
-  Token path_token = parser_expect_token(parser, TokenKindStrLit);
+static Expr parser_parse_use(Parser *parser) {
+  Expr use;
+  use.kind = ExprKindUse;
+  use.as.use = aalloc(sizeof(ExprUse));
 
-  char *path = aalloc(path_token.str.len + 1);
-  memcpy(path, path_token.str.ptr, path_token.str.len);
-  path[path_token.str.len] = '\0';
-  Str content = read_file(path);
-  Expr program = parse_program(content, path);
+  Token token = parser_expect_token(parser, TokenKindStrLit | TokenKindIdent);
+  bool has_name = token.kind == TokenKindIdent;
+  if (has_name) {
+    use.as.use->name = token.str;
+    token = parser_expect_token(parser, TokenKindStrLit);
+  }
 
-  Expr mod;
-  mod.kind = ExprKindMod;
-  mod.as.mod = aalloc(sizeof(ExprMod));
-  mod.as.mod->content = program.as.block;
+  char *file_path = aalloc(token.str.len + 1);
+  memcpy(file_path, token.str.ptr, token.str.len);
+  file_path[token.str.len] = '\0';
+  Str content = read_file(file_path);
+  Expr program = parse_program(content, file_path);
 
-  return mod;
+  use.as.use->content = program.as.block;
+
+  return use;
 }
 
 static Expr parser_parse_lhs(Parser *parser) {
@@ -534,7 +540,7 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindOParen | TokenKindStrLit |
                               TokenKindLet | TokenKindIf |
                               TokenKindWhile | TokenKindRet |
-                              TokenKindAsm | TokenKindMod);
+                              TokenKindAsm | TokenKindUse);
 
   _Static_assert(TokenKindCount == 20, "All token kinds should be handled here.");
   if (token.kind == TokenKindIntLit) {
@@ -579,8 +585,8 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs = parser_parse_ret(parser);
   } else if (token.kind == TokenKindAsm) {
     lhs = parser_parse_asm(parser);
-  } else if (token.kind == TokenKindMod) {
-    lhs = parser_parse_mod(parser);
+  } else if (token.kind == TokenKindUse) {
+    lhs = parser_parse_use(parser);
   }
 
   while (parser_peek_token(*parser, 1).kind == TokenKindOSqr) {

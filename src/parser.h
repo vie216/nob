@@ -42,7 +42,7 @@ typedef enum {
   ExprKindRet,
   ExprKindAsm,
   ExprKindDeref,
-  ExprKindMod,
+  ExprKindUse,
 } ExprKind;
 
 typedef struct ExprLit   ExprLit;
@@ -56,7 +56,7 @@ typedef struct ExprWhile ExprWhile;
 typedef struct ExprRet   ExprRet;
 typedef struct ExprAsm   ExprAsm;
 typedef struct ExprDeref ExprDeref;
-typedef struct ExprMod   ExprMod;
+typedef struct ExprUse   ExprUse;
 
 typedef union {
   ExprLit   *lit;
@@ -70,7 +70,7 @@ typedef union {
   ExprRet   *ret;
   ExprAsm   *_asm;
   ExprDeref *deref;
-  ExprMod   *mod;
+  ExprUse   *use;
 } ExprAs;
 
 typedef struct {
@@ -166,7 +166,8 @@ struct ExprDeref {
   Expr index;
 };
 
-struct ExprMod {
+struct ExprUse {
+  Str        name;
   ExprBlock *content;
 };
 

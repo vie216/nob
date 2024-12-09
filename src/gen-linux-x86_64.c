@@ -501,7 +501,7 @@ static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target) {
   case ExprKindRet:   return gen_ret_linux_x86_64(gen, expr.as.ret, target);
   case ExprKindAsm:   return gen_asm_linux_x86_64(gen, expr.as._asm, target);
   case ExprKindDeref: return gen_deref_linux_x86_64(gen, expr.as.deref, target);
-  case ExprKindMod:   return gen_block_linux_x86_64(gen, expr.as.mod->content, target);
+  case ExprKindUse:   return gen_block_linux_x86_64(gen, expr.as.use->content, target);
   }
 
   ERROR("Unreachable\n");
@@ -594,7 +594,7 @@ static void mem_used_count_in_expr(MemUsed *mem_used, Expr expr, bool target_is_
     mem_used_count_in_expr(mem_used, expr.as.deref->index, false);
   } break;
 
-  case ExprKindMod: break;
+  case ExprKindUse: break;
 
   default: {
     ERROR("Unreachable\n");
