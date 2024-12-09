@@ -6,6 +6,7 @@
 #include "gen-linux-x86_64.h"
 #include "log.h"
 #include "arena.h"
+#include "hash.h"
 
 #define TARGET(loc, strict) ((Target) { loc, strict })
 
@@ -65,6 +66,15 @@ static Str gen_var_loc(Generator *gen, Str name) {
   sb_push(&sb, "]");
 
   return sb_to_str(sb);
+}
+
+static void def_mangle(Def *def) {
+  i32 hash = hash_type(def->type);
+  StringBuilder temp_sb = {0};
+  sb_push_str(&temp_sb, def->name);
+  sb_push_char(&temp_sb, '@');
+  sb_push_i32(&temp_sb, hash < 0 ? -hash : hash);
+  def->loc = sb_to_str(temp_sb);
 }
 
 static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target);
@@ -296,7 +306,7 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
     gen_expr_linux_x86_64(gen, call->args->items[i], TARGET(arg_reg_names[i], true));
 
   sb_push(&gen->sb, "\tcall ");
-  sb_push_str(&gen->sb, call->name);
+  sb_push_str(&gen->sb, call->def->loc);
   sb_push(&gen->sb, "\n");
 
   if (target.strict && !str_eq(target.str, STR_LIT("rax"))) {
@@ -625,7 +635,7 @@ Str gen_linux_x86_64(Metadata meta) {
       exit(1);
     }
 
-    func.expr->def->loc = func.expr->def->name;
+    def_mangle(func.expr->def);
 
     Def *arg_def = func.arg_defs;
     for (i32 i = 0; i < func.arity; ++i) {
@@ -660,7 +670,7 @@ Str gen_linux_x86_64(Metadata meta) {
     gen_expr_linux_x86_64(&gen, func.expr->body,
                           TARGET(STR_LIT("rax"), true));
 
-    sb_push_str(&sb, func.expr->name);
+    sb_push_str(&sb, func.expr->def->loc);
     sb_push(&sb, ":\n");
 
     for (i32 i = 3; i < gen.ctx.max_regs_used; ++i) {
