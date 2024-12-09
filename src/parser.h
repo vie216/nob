@@ -167,7 +167,6 @@ struct ExprDeref {
 };
 
 struct ExprUse {
-  Str        name;
   ExprBlock *content;
 };
 

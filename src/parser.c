@@ -492,23 +492,17 @@ static Expr parser_parse_asm(Parser *parser) {
 }
 
 static Expr parser_parse_use(Parser *parser) {
-  Expr use;
-  use.kind = ExprKindUse;
-  use.as.use = aalloc(sizeof(ExprUse));
+  Token file_token = parser_expect_token(parser, TokenKindStrLit);
 
-  Token token = parser_expect_token(parser, TokenKindStrLit | TokenKindIdent);
-  bool has_name = token.kind == TokenKindIdent;
-  if (has_name) {
-    use.as.use->name = token.str;
-    token = parser_expect_token(parser, TokenKindStrLit);
-  }
-
-  char *file_path = aalloc(token.str.len + 1);
-  memcpy(file_path, token.str.ptr, token.str.len);
-  file_path[token.str.len] = '\0';
+  char *file_path = aalloc(file_token.str.len + 1);
+  memcpy(file_path, file_token.str.ptr, file_token.str.len);
+  file_path[file_token.str.len] = '\0';
   Str content = read_file(file_path);
   Expr program = parse_program(content, file_path);
 
+  Expr use;
+  use.kind = ExprKindUse;
+  use.as.use = aalloc(sizeof(ExprUse));
   use.as.use->content = program.as.block;
 
   return use;
