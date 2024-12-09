@@ -42,3 +42,17 @@ i32 hash_type(Type type) {
 
   return hash;
 }
+
+i32 hash_main_func(void) {
+  Type main_func_type = {
+    TypeKindFunc,
+    { .func = aalloc(sizeof(TypeFunc)) },
+    STR_LIT("8"),
+  };
+  main_func_type.as.func->name = STR_LIT("main");
+  main_func_type.as.func->result_type = (Type) { TypeKindUnit };
+  main_func_type.as.func->arg_defs = NULL;
+  main_func_type.as.func->arity = 0;
+
+  return hash_type(main_func_type);
+}

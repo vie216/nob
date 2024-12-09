@@ -1,0 +1,8 @@
+use "nstd/io.nb"
+
+let main() = rec()
+
+let rec() = (
+  print("Hello from rec! =)\n")
+  rec()
+)

@@ -534,10 +534,10 @@ static void mem_used_count_in_expr(MemUsed *mem_used, Expr expr, bool target_is_
   case ExprKindIdent: break;
 
   case ExprKindCall: {
-    bool preserve_rax_on_rhs_call = target_is_return &&
-                                    expr.as.call->args->items[1].kind == ExprKindCall;
-
     if (expr.as.call->def->is_intrinsic) {
+      bool preserve_rax_on_rhs_call = target_is_return &&
+                                      expr.as.call->args->items[1].kind == ExprKindCall;
+
       if (str_eq(expr.as.call->name, STR_LIT("+")) ||
           str_eq(expr.as.call->name, STR_LIT("-")) ||
           str_eq(expr.as.call->name, STR_LIT("*")) ||
@@ -621,8 +621,10 @@ Str gen_linux_x86_64(Metadata meta) {
   sb_push(&sb, "segment readable executable\n");
   sb_push(&sb, "entry _start\n");
   sb_push(&sb, "_start:\n");
-  sb_push(&sb, "\tcall main\n");
-  sb_push(&sb, "\tmov rdi,rax\n");
+  sb_push(&sb, "\tcall main@");
+  i32 main_func_hash = hash_main_func();
+  sb_push_i32(&sb, main_func_hash ? 0 -main_func_hash : main_func_hash);
+  sb_push(&sb, "\n\tmov rdi,rax\n");
   sb_push(&sb, "\tmov rax,60\n");
   sb_push(&sb, "\tsyscall\n");
 
