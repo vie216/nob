@@ -45,37 +45,46 @@ void assemble(char *asm_path) {
     int_arg->signedd = true;                                               \
     func->name = STR_LIT(op_name);                                         \
     func->result_type = (Type) { TypeKindInt, { .eent = int_arg }, size }; \
-    func->arg_defs = arg_defs;                                             \
+    func->arg_defs = bin_arg_defs;                                         \
     func->arity = 2;                                                       \
     bin_op_type = (Type) { TypeKindFunc, { .func = func }, size };         \
   } while (0)
 
+#define DEF_INT_UNOP(op_name)                                              \
+  do {                                                                     \
+    func = aalloc(sizeof(TypeFunc));                                       \
+    int_arg = aalloc(sizeof(TypeInt));                                     \
+    int_arg->signedd = true;                                               \
+    func->name = STR_LIT(op_name);                                         \
+    func->result_type = (Type) { TypeKindInt, { .eent = int_arg }, size }; \
+    func->arg_defs = un_arg_def;                                           \
+    func->arity = 1;                                                       \
+    un_op_type = (Type) { TypeKindFunc, { .func = func }, size };          \
+  } while (0)
+
 Def *intrinsic_defs(void) {
-  Def *defs = NULL;
-  Def *arg_defs = NULL;
+  Def *bin_arg_defs;
+  Def *un_arg_def;
   Str size = STR_LIT("8");
 
-  arg_defs = aalloc(sizeof(Def));
-  arg_defs->next = aalloc(sizeof(Def));
+  bin_arg_defs = aalloc(sizeof(Def));
+  bin_arg_defs->next = aalloc(sizeof(Def));
+  un_arg_def = aalloc(sizeof(Def));
 
   TypeInt *int_arg = aalloc(sizeof(TypeInt));
   int_arg->signedd = true;
-  arg_defs->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
 
-  int_arg = aalloc(sizeof(TypeInt));
-  int_arg->signedd = true;
-  arg_defs->next->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+  TypePtr *ptr_arg = aalloc(sizeof(TypePtr));
+  ptr_arg->points_to = (Type) { TypeKindInt, { .eent = int_arg }, size };
 
-  TypeFunc *func = aalloc(sizeof(TypeFunc));
-  int_arg = aalloc(sizeof(TypeInt));
-  int_arg->signedd = true;
-  func->result_type = (Type) { TypeKindInt, { .eent = int_arg }, size };
-  func->arg_defs = arg_defs;
-  int_arg = aalloc(sizeof(TypeInt));
-  int_arg->signedd = true;
-  arg_defs->next->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+  bin_arg_defs->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+  bin_arg_defs->next->type = (Type) { TypeKindInt, { .eent = int_arg }, size };
+  un_arg_def->type = (Type) { TypeKindPtr, { .ptr = ptr_arg }, size };
 
+  TypeFunc *func;
   Type bin_op_type;
+  Type un_op_type;
+  Def *defs = NULL;
 
   DEF_INT_BINOP("=");
   LL_APPEND(defs, Def);
@@ -147,6 +156,12 @@ Def *intrinsic_defs(void) {
   LL_APPEND(defs, Def);
   defs->name = STR_LIT("<=");
   defs->type = bin_op_type;
+  defs->is_intrinsic = true;
+
+  DEF_INT_UNOP("*");
+  LL_APPEND(defs, Def);
+  defs->name = STR_LIT("*");
+  defs->type = un_op_type;
   defs->is_intrinsic = true;
 
   return defs;

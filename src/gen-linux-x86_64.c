@@ -42,6 +42,7 @@ static void mem_used_use_reg(MemUsed *mem_used) {
 static Str gen_use_reg(Generator *gen) {
   if (gen->regs_used >= (i32) ARRAY_LEN(reg_names)) {
     ERROR("Exceeded amount of available registers\n");
+    INFO("TODO: use stack when this happens\n");
     exit(1);
   }
 
@@ -91,7 +92,7 @@ static void def_mangle(Def *def) {
 
 static Str gen_expr_linux_x86_64(Generator *gen, Expr expr, Target target);
 
-static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args, Target target) {
+static Str gen_binary_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args, Target target) {
   bool preserve_rax_on_rhs_call = str_eq(target.str, STR_LIT("rax")) &&
                                   args->items[1].kind == ExprKindCall;
 
@@ -219,6 +220,35 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
   }
 
   ERROR("No code generation for `"STR_FMT"` intrinsic was found\n", STR_ARG(name));
+  exit(1);
+}
+
+static Str gen_unary_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args, Target target) {
+  if (str_eq(name, STR_LIT("*"))) {
+    Str loc = gen_use_reg(gen);
+    loc = gen_expr_linux_x86_64(gen, args->items[0], TARGET(loc, true));
+
+    gen->regs_used -= 1;
+
+    sb_push(&gen->sb, "\tmov ");
+    sb_push_str(&gen->sb, target.str);
+    sb_push(&gen->sb, ",qword [");
+    sb_push_str(&gen->sb, loc);
+    sb_push(&gen->sb, "]\n");
+
+    return target.str;
+  }
+
+  ERROR("No code generation for `"STR_FMT"` intrinsic was found\n", STR_ARG(name));
+  exit(1);
+}
+
+static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args, Target target) {
+  if (args->len == 2) return gen_binary_intrinsic_linux_x86_64(gen, name, args, target);
+  else if (args->len == 1) return gen_unary_intrinsic_linux_x86_64(gen, name, args, target);
+
+  ERROR("Wrong arguments count for `"STR_FMT"` intrinsic: expected one or two, but got %d\n",
+        STR_ARG(name), args->len);
   exit(1);
 }
 
@@ -510,7 +540,7 @@ static Str gen_asm_linux_x86_64(Generator *gen, ExprAsm *_asm, Target target) {
 
 static Str gen_deref_linux_x86_64 (Generator *gen, ExprDeref *deref, Target target) {
   Str body = gen_expr_linux_x86_64(gen, deref->body, TARGET(target.str, true));
-  Str index = gen_expr_linux_x86_64(gen, deref->index, TARGET(reg_names[gen->regs_used++], true));
+  Str index = gen_expr_linux_x86_64(gen, deref->index, TARGET(gen_use_reg(gen), true));
 
   sb_push(&gen->sb, "\tadd ");
   sb_push_str(&gen->sb, body);
@@ -518,8 +548,7 @@ static Str gen_deref_linux_x86_64 (Generator *gen, ExprDeref *deref, Target targ
   sb_push_str(&gen->sb, index);
   sb_push(&gen->sb, "\n\tmov ");
   sb_push_str(&gen->sb, body);
-  sb_push(&gen->sb, ",");
-  sb_push(&gen->sb, "qword [");
+  sb_push(&gen->sb, ",qword [");
   sb_push_str(&gen->sb, body);
   sb_push(&gen->sb, "]\n");
 
@@ -563,34 +592,47 @@ static void mem_used_count_in_expr(MemUsed *mem_used, Expr expr, bool target_is_
 
   case ExprKindCall: {
     if (expr.as.call->def->is_intrinsic) {
-      bool preserve_rax_on_rhs_call = target_is_return &&
-                                      expr.as.call->args->items[1].kind == ExprKindCall;
+      if (expr.as.call->args->len == 2) {
+        bool preserve_rax_on_rhs_call = target_is_return &&
+                                        expr.as.call->args->items[1].kind == ExprKindCall;
 
-      if (str_eq(expr.as.call->name, STR_LIT("+")) ||
-          str_eq(expr.as.call->name, STR_LIT("-")) ||
-          str_eq(expr.as.call->name, STR_LIT("*")) ||
-          str_eq(expr.as.call->name, STR_LIT("/")) ||
-          str_eq(expr.as.call->name, STR_LIT("%"))) {
-        if (preserve_rax_on_rhs_call)
+        if (str_eq(expr.as.call->name, STR_LIT("+")) ||
+            str_eq(expr.as.call->name, STR_LIT("-")) ||
+            str_eq(expr.as.call->name, STR_LIT("*")) ||
+            str_eq(expr.as.call->name, STR_LIT("/")) ||
+            str_eq(expr.as.call->name, STR_LIT("%")) ||
+            str_eq(expr.as.call->name, STR_LIT("%")) ||
+            str_eq(expr.as.call->name, STR_LIT("%"))) {
+          if (preserve_rax_on_rhs_call)
+            mem_used_use_reg(mem_used);
           mem_used_use_reg(mem_used);
-        mem_used_use_reg(mem_used);
 
-        mem_used_count_in_expr(mem_used, expr.as.call->args->items[0], target_is_return);
-        mem_used_count_in_expr(mem_used, expr.as.call->args->items[1], false);
+          mem_used_count_in_expr(mem_used, expr.as.call->args->items[0], target_is_return);
+          mem_used_count_in_expr(mem_used, expr.as.call->args->items[1], false);
 
-        mem_used->regs_used -= 1 + preserve_rax_on_rhs_call;
-      } else if (str_eq(expr.as.call->name, STR_LIT("==")) ||
-                 str_eq(expr.as.call->name, STR_LIT("!="))) {
-        if (preserve_rax_on_rhs_call)
+          mem_used->regs_used -= 1 + preserve_rax_on_rhs_call;
+        } else if(str_eq(expr.as.call->name, STR_LIT("="))) {
+            mem_used_count_in_expr(mem_used, expr.as.call->args->items[1], target_is_return);
+        } else {
+          ERROR("No code generation for `"STR_FMT"` intrinsic was fount\n",
+                STR_ARG(expr.as.call->name));
+        }
+      } else if (expr.as.call->args->len == 1) {
+        if(str_eq(expr.as.call->name, STR_LIT("*"))) {
           mem_used_use_reg(mem_used);
-        mem_used_use_reg(mem_used);
+          mem_used_count_in_expr(mem_used, expr.as.call->args->items[0], target_is_return);
+          --mem_used->regs_used;
+        } else {
+          ERROR("No code generation for `"STR_FMT"` intrinsic was fount\n",
+                STR_ARG(expr.as.call->name));
+        }
+      } else {
+        ERROR("Wrong arguments count for `"STR_FMT"` intrinsic: expected one or two, but got %d\n",
+              STR_ARG(expr.as.call->name), expr.as.call->args->len);
+        exit(1);
 
-        mem_used_count_in_expr(mem_used, expr.as.call->args->items[0], target_is_return);
-        mem_used_count_in_expr(mem_used, expr.as.call->args->items[1], false);
-
-        mem_used->regs_used -= 1 + preserve_rax_on_rhs_call;
       }
-    } else {
+     } else {
       if (expr.as.call->args->len > mem_used->max_arg_regs_used)
         mem_used->max_arg_regs_used = expr.as.call->args->len;
 
@@ -628,9 +670,12 @@ static void mem_used_count_in_expr(MemUsed *mem_used, Expr expr, bool target_is_
   } break;
 
   case ExprKindDeref: {
-    mem_used_count_in_expr(mem_used, expr.as.deref->body, false);
+    mem_used_use_reg(mem_used);
+    mem_used_count_in_expr(mem_used, expr.as.deref->body, target_is_return);
     mem_used_count_in_expr(mem_used, expr.as.deref->index, false);
+    --mem_used->regs_used;
   } break;
+
 
   case ExprKindUse: break;
 
@@ -684,7 +729,7 @@ Str gen_linux_x86_64(Metadata meta) {
     gen.sb.len = 0;
     gen.ctx = (FuncCtx) {
       .func = &func,
-      .max_regs_used = mem_used.max_regs_used,
+      .max_regs_used = mem_used.arg_regs_used,
       .max_arg_regs_used = mem_used.max_arg_regs_used,
     };
 
@@ -703,7 +748,7 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push_str(&sb, func.expr->def->loc);
     sb_push(&sb, ":\n");
 
-    for (i32 i = 0; i + 1 < gen.ctx.max_regs_used; ++i) {
+    for (i32 i = 0; i < gen.ctx.max_regs_used; ++i) {
       sb_push(&sb, "\tpush ");
       sb_push_str(&sb, reg_names[i]);
       sb_push(&sb, "\n");
@@ -726,7 +771,7 @@ Str gen_linux_x86_64(Metadata meta) {
       sb_push(&sb, "\n");
     }
 
-    for (i32 i = 1; i < gen.ctx.max_regs_used; ++i) {
+    for (i32 i = 0; i < gen.ctx.max_regs_used; ++i) {
       sb_push(&sb, "\tpop ");
       sb_push_str(&sb, reg_names[gen.ctx.max_regs_used - i - 1]);
       sb_push(&sb, "\n");
