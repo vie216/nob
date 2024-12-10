@@ -39,6 +39,18 @@ static void mem_used_use_reg(MemUsed *mem_used) {
     mem_used->max_regs_used = mem_used->regs_used;
 }
 
+static Str gen_use_reg(Generator *gen) {
+  if (gen->regs_used >= (i32) ARRAY_LEN(reg_names)) {
+    ERROR("Exceeded amount of available registers\n");
+    exit(1);
+  }
+
+  if (gen->regs_used > gen->ctx.max_regs_used)
+    gen->ctx.max_regs_used = gen->regs_used;
+
+  return reg_names[++gen->regs_used];
+}
+
 static Str gen_stack_alloc(Generator *gen, i32 amount) {
   StringBuilder sb = {0};
   sb_push(&sb, "qword [rsp+");
@@ -88,10 +100,10 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
       str_eq(name, STR_LIT("*"))) {
     Str lhs_loc = target.str;
     if (preserve_rax_on_rhs_call)
-      lhs_loc = reg_names[gen->regs_used++];
+      lhs_loc = gen_use_reg(gen);
     Str lhs = gen_expr_linux_x86_64(gen, args->items[0], TARGET(lhs_loc, true));
 
-    Str rhs_loc = reg_names[gen->regs_used++];
+    Str rhs_loc = gen_use_reg(gen);
     Str rhs = gen_expr_linux_x86_64(gen, args->items[1], TARGET(rhs_loc, false));
 
     gen->regs_used -= 1 + preserve_rax_on_rhs_call;
@@ -118,10 +130,10 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
              str_eq(name, STR_LIT("%"))) {
     Str lhs_loc = STR_LIT("rax");
     if (preserve_rax_on_rhs_call)
-      lhs_loc = reg_names[gen->regs_used++];
+      lhs_loc = gen_use_reg(gen);
     gen_expr_linux_x86_64(gen, args->items[0], TARGET(lhs_loc, true));
 
-    Str rhs_loc = reg_names[gen->regs_used++];
+    Str rhs_loc = gen_use_reg(gen);
     Str rhs = gen_expr_linux_x86_64(gen, args->items[1], TARGET(rhs_loc, true));
 
     gen->regs_used -= 1 + preserve_rax_on_rhs_call;
@@ -168,12 +180,16 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
 
     return var_loc;
   } else if (str_eq(name, STR_LIT("==")) ||
-             str_eq(name, STR_LIT("!="))) {
+             str_eq(name, STR_LIT("!=")) ||
+             str_eq(name, STR_LIT(">")) ||
+             str_eq(name, STR_LIT("<")) ||
+             str_eq(name, STR_LIT(">=")) ||
+             str_eq(name, STR_LIT("<="))) {
     Str lhs_loc = target.str;
     if (preserve_rax_on_rhs_call)
-      lhs_loc = reg_names[gen->regs_used++];
+      lhs_loc = gen_use_reg(gen);
     Str lhs = gen_expr_linux_x86_64(gen, args->items[0], TARGET(lhs_loc, true));
-    Str rhs_loc = reg_names[gen->regs_used++];
+    Str rhs_loc = gen_use_reg(gen);
     Str rhs = gen_expr_linux_x86_64(gen, args->items[1], TARGET(rhs_loc, false));
 
     gen->regs_used -= 1 + preserve_rax_on_rhs_call;
@@ -185,8 +201,16 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     sb_push(&gen->sb, "\n");
     if (str_eq(name, STR_LIT("==")))
       sb_push(&gen->sb, "\tsete al\n");
-    else
+    else if (str_eq(name, STR_LIT("!=")))
       sb_push(&gen->sb, "\tsetne al\n");
+    else if (str_eq(name, STR_LIT(">")))
+      sb_push(&gen->sb, "\tseta al\n");
+    else if (str_eq(name, STR_LIT("<")))
+      sb_push(&gen->sb, "\tsetb al\n");
+    else if (str_eq(name, STR_LIT(">=")))
+      sb_push(&gen->sb, "\tsetae al\n");
+    else if (str_eq(name, STR_LIT("<=")))
+      sb_push(&gen->sb, "\tsetbe al\n");
     sb_push(&gen->sb, "\tmovzx ");
     sb_push_str(&gen->sb, lhs);
     sb_push(&gen->sb, ", al\n");
@@ -194,7 +218,7 @@ static Str gen_intrinsic_linux_x86_64(Generator *gen, Str name, ExprBlock *args,
     return lhs;
   }
 
-  ERROR("Unreachable\n");
+  ERROR("No code generation for `"STR_FMT"` intrinsic was found\n", STR_ARG(name));
   exit(1);
 }
 
@@ -290,6 +314,8 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
   if (args_count > gen->ctx.func->arity)
     args_count = gen->ctx.func->arity;
 
+  i32 prev_stack_used = gen->stack_used;
+
   for (i32 i = 0; i < args_count; ++i) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, gen_stack_alloc(gen, 8));
@@ -298,10 +324,10 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
     sb_push(&gen->sb, "\n");
   }
 
-  i32 prev_stack_used = gen->stack_used;
-
-  for (i32 i = 0; i < call->args->len; ++i)
+  for (i32 i = 0; i < call->args->len; ++i) {
     gen_expr_linux_x86_64(gen, call->args->items[i], TARGET(arg_reg_names[i], true));
+    gen->stack_used = prev_stack_used;
+  }
 
   sb_push(&gen->sb, "\tcall ");
   sb_push_str(&gen->sb, call->def->loc);
@@ -313,8 +339,6 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
     sb_push(&gen->sb, ",rax\n");
   }
 
-  gen->stack_used -= prev_stack_used;
-
   for (i32 i = 0; i < args_count; ++i) {
     sb_push(&gen->sb, "\tmov ");
     sb_push_str(&gen->sb, arg_reg_names[i]);
@@ -322,6 +346,8 @@ static Str gen_call_linux_x86_64(Generator *gen, ExprCall *call, Target target) 
     sb_push_str(&gen->sb, gen_stack_alloc(gen, 8));
     sb_push(&gen->sb, "\n");
   }
+
+  gen->stack_used = prev_stack_used;
 
   if (target.strict)
     return target.str;
@@ -438,19 +464,23 @@ static Str gen_ret_linux_x86_64(Generator *gen, ExprRet *ret, Target target) {
     sb_push(&gen->sb, "\n");
   }
 
-  if (gen->ctx.func->scope_size != 0) {
+  sb_push(&gen->sb, "\tjmp ");
+  sb_push_str(&gen->sb, gen->ctx.func->expr->def->loc);
+  sb_push(&gen->sb, "_end\n");
+
+  /*if (gen->ctx.func->scope_size != 0) {
     sb_push(&gen->sb, "\tadd rsp,");
     sb_push_i32(&gen->sb, gen->ctx.func->scope_size);
     sb_push(&gen->sb, "\n");
   }
 
-  for (i32 i = gen->ctx.max_regs_used - 3; i >= 0; --i) {
+  for (i32 i = 1; i < gen->ctx.max_regs_used; ++i) {
     sb_push(&gen->sb, "\tpop ");
-    sb_push_str(&gen->sb, reg_names[i]);
+    sb_push_str(&gen->sb, reg_names[gen->ctx.max_regs_used - i - 1]);
     sb_push(&gen->sb, "\n");
   }
 
-  sb_push(&gen->sb, "\tret\n");
+  sb_push(&gen->sb, "\tret\n");*/
 
   return target.str;
 }
@@ -673,7 +703,7 @@ Str gen_linux_x86_64(Metadata meta) {
     sb_push_str(&sb, func.expr->def->loc);
     sb_push(&sb, ":\n");
 
-    for (i32 i = 3; i < gen.ctx.max_regs_used; ++i) {
+    for (i32 i = 0; i + 1 < gen.ctx.max_regs_used; ++i) {
       sb_push(&sb, "\tpush ");
       sb_push_str(&sb, reg_names[i]);
       sb_push(&sb, "\n");
@@ -687,15 +717,18 @@ Str gen_linux_x86_64(Metadata meta) {
 
     sb_push_str(&sb, sb_to_str(gen.sb));
 
+    sb_push_str(&sb, func.expr->def->loc);
+    sb_push(&sb, "_end:\n");
+
     if (func.scope_size != 0) {
       sb_push(&sb, "\tadd rsp,");
       sb_push_i32(&sb, func.scope_size);
       sb_push(&sb, "\n");
     }
 
-    for (i32 i = gen.ctx.max_regs_used - 3; i >= 0; --i) {
+    for (i32 i = 1; i < gen.ctx.max_regs_used; ++i) {
       sb_push(&sb, "\tpop ");
-      sb_push_str(&sb, reg_names[i]);
+      sb_push_str(&sb, reg_names[gen.ctx.max_regs_used - i - 1]);
       sb_push(&sb, "\n");
     }
 
