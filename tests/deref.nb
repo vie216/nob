@@ -1,1 +1,4 @@
-let main() = "hello world"[2]
+let main() = (
+  let text = "hello world"
+  text[2] + *text
+)
