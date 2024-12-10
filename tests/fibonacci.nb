@@ -1,8 +1,6 @@
 let main() = fib(6)
 
 let fib(n: s64): s64 = (
-  #if (n < 2): n
-  #else: fib(n - 1) + fib(n - 2)
-  if (n < 2): ret n
-  fib(n - 1) + fib(n - 2)
+  if (n < 2): n
+  else: fib(n - 1) + fib(n - 2)
 )
