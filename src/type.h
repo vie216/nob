@@ -52,7 +52,6 @@ typedef struct {
   ExprFunc *expr;
   Def      *arg_defs;
   i32       arity;
-  i32       scope_size;
 } Func;
 
 typedef struct {

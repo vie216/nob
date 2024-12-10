@@ -122,63 +122,6 @@ static void type_print(Type type) {
   }
 }
 
-static i32 expr_scope_size(Expr expr, i32 *args_count_in_subcall) {
-  i32 scope_size = 0;
-
-  switch (expr.kind) {
-  case ExprKindLit: break;
-
-  case ExprKindBlock: {
-    for (i32 i = 0; i < expr.as.block->len; ++i)
-      scope_size += expr_scope_size(expr.as.block->items[i], args_count_in_subcall);
-  } break;
-
-  case ExprKindIdent: break;
-
-  case ExprKindCall: {
-    if (expr.as.call->args->len > *args_count_in_subcall)
-      *args_count_in_subcall = expr.as.call->args->len;
-
-    for (i32 i = 0; i < expr.as.call->args->len; ++i)
-      scope_size += expr_scope_size(expr.as.call->args->items[i], args_count_in_subcall);
-  } break;
-
-  case ExprKindVar: {
-    scope_size = 8 + expr_scope_size(expr.as.var->value, args_count_in_subcall);
-  } break;
-
-  case ExprKindFunc: break;
-
-  case ExprKindIf: {
-    scope_size = expr_scope_size(expr.as.eef->cond, args_count_in_subcall);
-    scope_size += expr_scope_size(expr.as.eef->body, args_count_in_subcall);
-    if (expr.as.eef->has_else)
-      scope_size += expr_scope_size(expr.as.eef->elze, args_count_in_subcall);
-  } break;
-
-  case ExprKindWhile: {
-    scope_size = expr_scope_size(expr.as.whail->cond, args_count_in_subcall);
-    scope_size += expr_scope_size(expr.as.whail->body, args_count_in_subcall);
-  } break;
-
-  case ExprKindRet: {
-    if (expr.as.ret->has_result)
-      scope_size = expr_scope_size(expr.as.ret->result, args_count_in_subcall);
-  } break;
-
-  case ExprKindAsm: break;
-
-  case ExprKindDeref: {
-    scope_size = expr_scope_size(expr.as.deref->body, args_count_in_subcall);
-    scope_size += expr_scope_size(expr.as.deref->index, args_count_in_subcall);
-  } break;
-
-  case ExprKindUse: break;
-  }
-
-  return scope_size;
-}
-
 static Def *checker_lookup_def(Checker *checker, Str target_name) {
   Def *def = checker->defs;
   while (def) {
@@ -296,6 +239,11 @@ static void checker_collect_funcs(Checker *checker, Expr expr) {
   case ExprKindUse: {
     for (i32 i = 0; i < expr.as.use->content->len; ++i)
       checker_collect_funcs(checker, expr.as.use->content->items[i]);
+  } break;
+
+  case ExprKindArray: {
+    for (i32 i = 0; i < expr.as.array->elements->len; ++i)
+      checker_collect_funcs(checker, expr.as.array->elements->items[i]);
   } break;
   }
 }
@@ -553,6 +501,34 @@ static Type checker_type_check_expr(Checker *checker, Expr expr) {
       checker_type_check_expr(checker, expr.as.use->content->items[i]);
     return (Type) { TypeKindUnit };
   };
+
+  case ExprKindArray: {
+    if (expr.as.array->elements->len == 0) {
+      ERROR("Array should contain at least one element\n");
+      checker->has_error = true;
+      return (Type) { TypeKindUnit };
+    }
+
+    Type elements_type = checker_type_check_expr(checker, expr.as.array->elements->items[0]);
+    TypePtr *ptr_type = aalloc(sizeof(TypePtr));
+    ptr_type->points_to = elements_type;
+    Type type = { TypeKindPtr, { .ptr = ptr_type  }, STR_LIT("8") };
+
+    for (i32 i = 0; i < expr.as.array->elements->len; ++i) {
+      Type element_type = checker_type_check_expr(checker, expr.as.array->elements->items[i]);
+      if (!type_eq(element_type, elements_type)) {
+        ERROR("Expected element of type ");
+        type_print(elements_type);
+        fputs(", but found ", stdout);
+        type_print(element_type);
+        fputc('\n', stdout);
+        checker->has_error = true;
+        return type;
+      }
+    }
+
+    return type;
+  };
   }
 
   ERROR("Unreachable\n");
@@ -575,17 +551,6 @@ Metadata type_check(Expr program, Def *intrinsic_defs) {
 
   if (checker.has_error)
     exit(1);
-
-  for (i32 i = 0; i < checker.funcs.len; ++i) {
-    Func *func = checker.funcs.items + i;
-    i32 max_args_count_in_subcall = 0;
-    func->scope_size = expr_scope_size(func->expr->body, &max_args_count_in_subcall);
-
-    if (func->expr->args.len < max_args_count_in_subcall)
-      func->scope_size += func->expr->args.len * 8;
-    else
-      func->scope_size += max_args_count_in_subcall * 8;
-  }
 
   return (Metadata) {
     .defs = checker.defs,

@@ -18,8 +18,16 @@ typedef struct {
   i32  len, cap;
 } Strings;
 
+typedef i32 ArrayLen;
+
+typedef struct {
+  ArrayLen *items;
+  i32       len, cap;
+} ArrayLens;
+
 typedef struct {
   Func *func;
+  i32   scope_size;
   i32   max_regs_used;
   i32   max_arg_regs_used;
 } FuncCtx;
@@ -28,6 +36,7 @@ typedef struct {
   StringBuilder sb;
   Vars          vars;
   Strings       strings;
+  ArrayLens     array_lens;
   FuncCtx       ctx;
   i32           regs_used;
   i32           stack_used;

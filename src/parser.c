@@ -508,6 +508,16 @@ static Expr parser_parse_use(Parser *parser) {
   return use;
 }
 
+static Expr parser_parse_array(Parser *parser) {
+  Expr block = parser_parse_block(parser, TokenKindComma, TokenKindCSqr);
+  Expr array;
+  array.kind = ExprKindArray;
+  array.as.array = aalloc(sizeof(ExprArray));
+  array.as.array->elements = block.as.block;
+
+  return array;
+}
+
 static Expr parser_parse_lhs(Parser *parser) {
   Expr lhs;
   Token token = parser_peek_token(*parser, 1);
@@ -534,7 +544,8 @@ static Expr parser_parse_lhs(Parser *parser) {
                               TokenKindOParen | TokenKindStrLit |
                               TokenKindLet | TokenKindIf |
                               TokenKindWhile | TokenKindRet |
-                              TokenKindAsm | TokenKindUse);
+                              TokenKindAsm | TokenKindUse |
+                              TokenKindOSqr);
 
   _Static_assert(TokenKindCount == 20, "All token kinds should be handled here.");
   if (token.kind == TokenKindIntLit) {
@@ -581,6 +592,8 @@ static Expr parser_parse_lhs(Parser *parser) {
     lhs = parser_parse_asm(parser);
   } else if (token.kind == TokenKindUse) {
     lhs = parser_parse_use(parser);
+  } else if (token.kind == TokenKindOSqr) {
+    lhs = parser_parse_array(parser);
   }
 
   while (parser_peek_token(*parser, 1).kind == TokenKindOSqr) {
